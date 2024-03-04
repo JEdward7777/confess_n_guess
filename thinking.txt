@@ -1,0 +1,38 @@
+Was thinking about making a fibbage game.  I was trying to figure out how I could make it with gradio, but the basic gist of it is that you have to be able to push events to the screen and the only framework that I know that can do that is a nodejs server with socketio.    With that in place I suppose I can make the UI with react.  Might as well as that is what I have been studying, just set the proper data different places and the screen will automatically update.  User actions will all be function callbacks which will communicate back to the server.  So I want to get a full scope of all the screens so that I can have the full picture in place and not put it together piece meal.
+
+
+
+1 new game.  Has a new game button or a join game button where you put a code in.
+
+--host screens.
+
+h1 collecting users. Show the list of users which have joined and a start button.
+
+h2 information screen with timer.  This can be reused every time everyone is supposed to be putting in answers.
+
+h3 Show all the lies and truths at the same time for people to pick on their devices.
+
+h4 Iterate through the different answers and pop up yes or no.
+
+h5 Show the points for the round.
+
+h6 Show the winner.  Button to go back to host screen.
+
+--client screens.
+
+c1 Where you Type in your name and pick an emogi for your picture.
+
+c2 waiting screen, just whatever text.
+
+c3 shows question and lets you type in an answer.
+
+c4 Pick the best answer out of a list.
+
+
+
+Huh.  I wonder if I could do this we websockets so that I don't actually need a server...  Then I could do it with a static page.
+
+I made a folder for this so I can copy this to the thinking in that folder.
+
+03/04/2024
+I am having data structure pain, so I want to flip the server side to be TypeScript.  So I will check everything in and then try and make it a TypeScript Vite project.

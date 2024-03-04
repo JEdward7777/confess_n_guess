@@ -1,34 +1,68 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { useRef, useState } from 'react'
 import './App.css'
+import G1NewGamePage from './G1NewGamePage';
+import H1CollectingUsersPage from './H1CollectingUsersPage';
+import { GameState, Screens } from './IncludeStuff';
+import React, { useEffect } from 'react';
+
+//@ts-ignore
+import {socket } from './socket';
+import C1TypeInYourNameAndPickAnEmojiForYourPicturePage from './C1TypeInYourNameAndPickAnEmojiForYourPicturePage';
 
 function App() {
-  const [count, setCount] = useState(0)
+  //have a state representing what screen we are on.
+  const [gameState, _setGameState] = useState<GameState>({
+    sharedState: {
+      users: {},
+      code: "",
+    },
+    name: "",
+    screen : Screens.g1NewGame,
+    error: "",
+  });
+  const gameStateRef = useRef<GameState>( gameState );
 
+  function setGameState( newState: GameState ) {
+    const beforeState = gameStateRef.current;
+    const combinedState = { ...gameStateRef.current, ...newState };
+    _setGameState( combinedState );
+    gameStateRef.current = combinedState;
+    console.log( "setGameState", newState, beforeState );
+  }
+  const screen = gameState.screen;
+
+  useEffect(() => {
+    function onGameStateChange(newState: GameState) {
+      console.log( "onGameStateChange", newState );
+      setGameState(newState);
+    }
+    
+    socket.on('gameState', onGameStateChange);
+    return () => {
+      socket.off('gameState', onGameStateChange);
+    };
+  }, []);
+
+  console.log( "Screen is ", screen );
+
+  //TODO: Create the next page for the client.
+
+  //show the correct screen based on the screen state.
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="App">
+      {screen === Screens.g1NewGame         && <G1NewGamePage         gameState={gameState} />}
+      {screen === Screens.h1CollectingUsers && <H1CollectingUsersPage gameState={gameState} />}{/* 
+      {screen === Screens.h2InformationScreenWithTimer && <h2InformationScreenWithTimer />}
+      {screen === Screens.h3ShowTheLiesAndTruths && <h3ShowTheLiesAndTruths />}
+      {screen === Screens.h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo && <h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo />}
+      {screen === Screens.h5ShowThePointsForTheRound && <h5ShowThePointsForTheRound />}
+      {screen === Screens.h6ShowTheWinner && <h6ShowTheWinner />}}*/}
+      {screen === Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture && <C1TypeInYourNameAndPickAnEmojiForYourPicturePage gameState={gameState}/>}{/* 
+      {screen === Screens.c2WaitingScreenJustWhateverText && <c2WaitingScreenJustWhateverText />}
+      {screen === Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer && <c3ShowsQuestionAndLetsYouTypeInAnAnswer />}
+      {screen === Screens.c4PickTheBestAnswerOutOfAList && <c4PickTheBestAnswerOutOfAList />} */}
+      <p>{screen}</p>
+    </div>
   )
 }
 
