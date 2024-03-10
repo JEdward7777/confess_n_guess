@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import './App.css'
 import G1NewGamePage from './G1NewGamePage';
 import H1CollectingUsersPage from './H1CollectingUsersPage';
-import { ClientState, Screens } from './IncludeStuff';
+import { ClientState, Screens } from './../../src/IncludeStuff';
 import React, { useEffect } from 'react';
 
 //@ts-ignore

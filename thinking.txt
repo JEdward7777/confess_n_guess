@@ -48,3 +48,8 @@ npx tsc
 
 And to run it it is
 node dist/index.js
+
+
+The socket connections were not forming so I simplified the project as much as possible until I proved that it was working and then I started making it more complicated until weird stuff happened.
+
+What I figured out is when I added the relative path to the type deffinitions in the client package, then it broke because the src foder ended up in the dist folder.  I think what I am going to try and do is have the Vite project reference the include types form the parent folder instead of the other way around because the client side has the more powerful build environment.  Well, it is at least a thought.

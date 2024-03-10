@@ -3,7 +3,7 @@ import {socket} from './socket';
 
 import React, {useState} from 'react';
 
-import {ClientState} from './IncludeStuff';
+import {ClientState} from './../../src/IncludeStuff';
 import EmojiPicker from './EmojiPicker'; // Import the EmojiPicker component
 
 

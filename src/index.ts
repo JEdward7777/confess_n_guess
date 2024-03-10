@@ -16,7 +16,7 @@ import * as path from 'path';
 // const path = require('path');
 
 import { Server, Socket } from "socket.io";
-import {Screens, SharedState, ClientState, UserPoints } from "../fibbage_knockoff_client/src/IncludeStuff";
+import {Screens, SharedState, ClientState, UserPoints } from "./IncludeStuff";
 
 var httpPath = path.join( __dirname, "../fibbage_knockoff_client/dist/" );
 

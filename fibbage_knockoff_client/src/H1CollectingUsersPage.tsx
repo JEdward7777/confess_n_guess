@@ -7,7 +7,7 @@ import React from 'react';
 import {socket} from './socket';
 
 //import React from 'react';
-import {ClientState} from './IncludeStuff';
+import {ClientState} from './../../src/IncludeStuff';
 
 //Single argument of game state.
 

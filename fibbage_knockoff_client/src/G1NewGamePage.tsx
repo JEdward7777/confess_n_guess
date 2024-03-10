@@ -1,6 +1,6 @@
 //react page showing new game button or join game button where you put a code in.
 //import React from 'react';
-import {ClientState} from './IncludeStuff';
+import {ClientState} from './../../src/IncludeStuff';
 //Put a ts ignore on the next line.
 import React, {useState} from 'react';
 //@ts-ignore
