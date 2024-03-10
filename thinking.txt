@@ -36,3 +36,15 @@ I made a folder for this so I can copy this to the thinking in that folder.
 
 03/04/2024
 I am having data structure pain, so I want to flip the server side to be TypeScript.  So I will check everything in and then try and make it a TypeScript Vite project.
+
+Here is how I am going to create TypeScript:
+https://gemini.google.com/app/539f6198356c78a5
+
+03/09/2024
+I checked in on the project and it looks like I finished flipping it to TypeScript.  I would like to make it share TypeScript definitions between front end and back end.
+
+I also need to make some package scripts for starting and compiling this but for now just know that to compile the front end it is
+npx tsc
+
+And to run it it is
+node dist/index.js

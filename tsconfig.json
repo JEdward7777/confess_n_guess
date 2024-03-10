@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "target": "es2019", // Set the target ECMAScript version (adjust as needed)
+        "module": "commonjs", // Module system for Node.js
+        "moduleResolution": "node", // Module resolution strategy for Node.js
+        "strict": true, // Enable strict type checking (recommended)
+        "noImplicitAny": true, // Disallow implicit usage of `any` type (recommended)
+        "sourceMap": true, // Generate source maps for debugging
+        "outDir": "dist" // Output directory for compiled JavaScript files (optional)
+    },
+    "include": ["src/**/*"] // Include all files within the "src" directory for compilation
+}

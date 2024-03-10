@@ -7,14 +7,14 @@ import React from 'react';
 import {socket} from './socket';
 
 //import React from 'react';
-import {GameState} from './IncludeStuff';
+import {ClientState} from './IncludeStuff';
 
 //Single argument of game state.
 
 //declare the types of teh arguments to include one arg of type GameState.
 
 interface H1CollectingUsersPageProps {
-    gameState: GameState,
+    gameState: ClientState,
 }
 
 

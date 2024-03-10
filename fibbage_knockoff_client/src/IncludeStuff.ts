@@ -1,4 +1,4 @@
-export interface User {
+export interface UserPoints {
     name: string
     emoji: string
     points: number
@@ -19,14 +19,16 @@ export enum Screens {
     c4PickTheBestAnswerOutOfAList = 10
 }
 
-interface SharedState {
-    users: { [key : string]: User },
+export interface SharedState {
+    users: { [key : string]: UserPoints },
     code: string,
 }
 
-export interface GameState {
+export interface ClientState {
     sharedState?: SharedState,
     name?: string
+    emoji: string;
     screen?: Screens,
+    code: string;
     error?: string,
 }

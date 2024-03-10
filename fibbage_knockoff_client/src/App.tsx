@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import './App.css'
 import G1NewGamePage from './G1NewGamePage';
 import H1CollectingUsersPage from './H1CollectingUsersPage';
-import { GameState, Screens } from './IncludeStuff';
+import { ClientState, Screens } from './IncludeStuff';
 import React, { useEffect } from 'react';
 
 //@ts-ignore
@@ -11,18 +11,20 @@ import C1TypeInYourNameAndPickAnEmojiForYourPicturePage from './C1TypeInYourName
 
 function App() {
   //have a state representing what screen we are on.
-  const [gameState, _setGameState] = useState<GameState>({
+  const [gameState, _setGameState] = useState<ClientState>({
     sharedState: {
       users: {},
       code: "",
     },
     name: "",
+    emoji: "",
     screen : Screens.g1NewGame,
     error: "",
+    code: "",
   });
-  const gameStateRef = useRef<GameState>( gameState );
+  const gameStateRef = useRef<ClientState>( gameState );
 
-  function setGameState( newState: GameState ) {
+  function setGameState( newState: ClientState ) {
     const beforeState = gameStateRef.current;
     const combinedState = { ...gameStateRef.current, ...newState };
     _setGameState( combinedState );
@@ -32,7 +34,7 @@ function App() {
   const screen = gameState.screen;
 
   useEffect(() => {
-    function onGameStateChange(newState: GameState) {
+    function onGameStateChange(newState: ClientState) {
       console.log( "onGameStateChange", newState );
       setGameState(newState);
     }

@@ -1,30 +1,71 @@
-const express = require('express');
-const app = express();
-const http = require('http');
-const server = http.createServer(app);
-const path = require('path');
-const { Server } = require("socket.io");
-const io = new Server(server);
 
-var httpPath = path.join( __dirname, "fibbage_knockoff_client/dist/" );
+import * as express from 'express';
+const app = express();
+
+import * as http from 'http';
+
+const server = http.createServer(app);
+import * as path from 'path';
+
+// const express = require('express');
+// const app = express();
+
+// const http = require('http');
+
+// const server = http.createServer(app);
+// const path = require('path');
+
+import { Server, Socket } from "socket.io";
+import {Screens, SharedState, ClientState, UserPoints } from "../fibbage_knockoff_client/src/IncludeStuff";
+
+var httpPath = path.join( __dirname, "../fibbage_knockoff_client/dist/" );
 
 app.use(express.static(httpPath));
 
 
-const g1NewGame = 0;
-const h1CollectingUsers = 1;
-const h2InformationScreenWithTimer = 2;
-const h3ShowTheLiesAndTruths = 3;
-const h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo = 4;
-const h5ShowThePointsForTheRound = 5;
-const h6ShowTheWinner = 6;
-const c1TypeInYourNameAndPickAnEmojiForYourPicture = 7;
-const c2WaitingScreenJustWhateverText = 8;
-const c3ShowsQuestionAndLetsYouTypeInAnAnswer = 9;
-const c4PickTheBestAnswerOutOfAList = 10;
+interface GameState{
+    hostSocket: Socket;
+    userSockets: { [userId: string]: Socket };
+    sharedState: SharedState;
+}
+
+const games : { [gameCode: string]: GameState } = {};
 
 
-const games = {};
+interface ServerToClientEvents {
+    // noArg: () => void;
+    // basicEmit: (a: number, b: string, c: Buffer) => void;
+    // withAck: (d: string, callback: (e: number) => void) => void;
+    gameState: (clientState: ClientState) => void;
+  }
+
+  interface NameAndEmoji{
+    name: string;
+    emoji: string;
+    code: string;
+  }
+  
+  interface ClientToServerEvents {
+    newGame: () => void;
+    joinGame: (gameCode: string) => void;
+    nameAndEmoji: (msg:NameAndEmoji) => void;
+  }
+  
+  interface InterServerEvents {
+    ping: () => void;
+  }
+  
+  interface SocketData {
+    name: string;
+    age: number;
+  }
+
+const io = new Server<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+>(server);
 
 io.on('connection', (socket) =>{
     console.log('a user connected');
@@ -33,7 +74,7 @@ io.on('connection', (socket) =>{
     });
 
 
-    socket.on( 'newGame', (msg) => {
+    socket.on( 'newGame', () => {
         const charactersToUse = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         const code = Array.from( {length: 5}, () => charactersToUse.charAt( Math.floor( Math.random() * charactersToUse.length ) ) ).join( '' );
 
@@ -57,7 +98,7 @@ io.on('connection', (socket) =>{
         games[code].hostSocket.emit( 'gameState', {
             sharedState: games[code].sharedState,
             name: "<host>",
-            screen: h1CollectingUsers,
+            screen: Screens.h1CollectingUsers,
             error: ""
         } );
     });
@@ -72,15 +113,23 @@ io.on('connection', (socket) =>{
             socket.emit( 'gameState', {
                 sharedState: games[code].sharedState, 
                 name: "", 
-                screen: c1TypeInYourNameAndPickAnEmojiForYourPicture, 
-                error:""
+                emoji: "",
+                screen: Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture, 
+                error:"",
+                code
             } );
         }else{
             console.log( "invalid code valid codes are " + Object.keys( games ) );
             //send an error message to the client if the code is invalid
             socket.emit( 'gameState', {
-                code, screen: g1NewGame, 
-                error: "invalid code"
+                code, screen: Screens.g1NewGame, 
+                error: "invalid code",
+                name: "",
+                emoji: "",
+                sharedState: {
+                    users: {},
+                    code
+                }
             } );
         }
     });
@@ -105,14 +154,21 @@ io.on('connection', (socket) =>{
                 sharedState: games[code].sharedState,
                 name,
                 emoji,
-                screen: h2InformationScreenWithTimer
+                screen: Screens.h2InformationScreenWithTimer,
+                code
             } );
         }else{
             console.log( "invalid code valid codes are " + Object.keys( games ) );
             //send an error message to the client if the code is invalid
             socket.emit( 'gameState', {
-                code, screen: g1NewGame, 
-                error: "invalid game code"
+                code, screen: Screens.g1NewGame, 
+                error: "invalid game code",
+                name: "",
+                emoji: "",
+                sharedState: {
+                    users: {},
+                    code
+                }
             } );
         }
     });

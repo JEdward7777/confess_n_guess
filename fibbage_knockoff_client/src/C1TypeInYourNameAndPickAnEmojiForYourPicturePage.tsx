@@ -3,12 +3,12 @@ import {socket} from './socket';
 
 import React, {useState} from 'react';
 
-import {GameState} from './IncludeStuff';
+import {ClientState} from './IncludeStuff';
 import EmojiPicker from './EmojiPicker'; // Import the EmojiPicker component
 
 
 interface C1TypeInYourNameAndPickAnEmojiForYourPicturePageProps {
-    gameState: GameState
+    gameState: ClientState
 }
 
 const C1TypeInYourNameAndPickAnEmojiForYourPicturePage = ({gameState}: C1TypeInYourNameAndPickAnEmojiForYourPicturePageProps) => {
