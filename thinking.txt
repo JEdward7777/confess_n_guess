@@ -52,4 +52,38 @@ node dist/index.js
 
 The socket connections were not forming so I simplified the project as much as possible until I proved that it was working and then I started making it more complicated until weird stuff happened.
 
-What I figured out is when I added the relative path to the type deffinitions in the client package, then it broke because the src foder ended up in the dist folder.  I think what I am going to try and do is have the Vite project reference the include types form the parent folder instead of the other way around because the client side has the more powerful build environment.  Well, it is at least a thought.
+What I figured out is when I added the relative path to the type definitions in the client package, then it broke because the src folder ended up in the dist folder.  I think what I am going to try and do is have the Vite project reference the include types form the parent folder instead of the other way around because the client side has the more powerful build environment.  Well, it is at least a thought.
+
+It worked.  Woot woot.
+
+03/16/2024
+I got code-server running.  So I am editing this from mom and Dad's Fideler's house.  The terminal is laggy to type in but the editor is running at full speed.
+
+Ok, so I need to make a todo list because I have to think of each thing but there are a lot of things
+
+We want to send it to the screen where it tells people to answer questions about themselves and there is a count down timer.
+That screen number is h2InformationScreenWithTimer
+
+Need to figure out how to send a message to the server.
+
+The host is a "user" with the name "<host>".  There is a hostSocket in GameState under the game code.
+
+I need to go into the client code and create a command which sends a message to the server when the start game button is hit.
+
+startGame is sent.
+
+Ok, I set the server side.  Now I need to construct the client side to actually show the screens.
+
+I think I will make the screen which shows your question and lets you type in your response.
+
+Done.  Now I need to make the server screen that tells people to answer their questions and has a timer which counts down.
+
+Ok, I realize that the screen that asks the user for their question shows the question instead of showing the text.
+
+I also didn't finish converting the screen that the server sits on with a timer.
+
+03/23/2024
+I want to finish making the current question answering screen work, and then I want to create a kill button on the first screen which will make the server save its state and shutdown.
+
+I have a strategy of saving the client state by using a hashtag to give an id to each client and then I can use local or local storage.
+

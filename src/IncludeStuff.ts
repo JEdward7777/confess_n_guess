@@ -24,11 +24,15 @@ export interface SharedState {
     code: string,
 }
 
-export interface ClientState {
+export interface ClientGameState {
     sharedState?: SharedState,
+
+
     name?: string
-    emoji: string;
+    emoji?: string;
+
     screen?: Screens,
-    code: string;
     error?: string,
+    question?: string,
+    text?: string,
 }

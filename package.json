@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "build": "tsc",
+    "build_server": "tsc",
+    "build_client": "(cd fibbage_knockoff_client && npm run build)",
+    "build": "npm run build_client && npm run build_server",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Joshua Lansford",
