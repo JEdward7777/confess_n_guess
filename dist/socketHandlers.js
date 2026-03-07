@@ -74,16 +74,27 @@ class SocketHandlers {
                 return IncludeStuff_1.Screens.h1CollectingUsers;
         }
     }
-    sendHostToCorrectScreen(code, gameState) {
+    sendHostToCorrectScreen(code, gameState, hostSocket) {
         const phase = gameState.getPhase();
         const targetPlayer = gameState.getCurrentLieTargetPlayer();
         const baseState = {
             sharedState: gameState.getSharedState(),
             name: '<host>'
         };
+        // Helper to send to host - either via stored socket or provided socket
+        const sendState = (state) => {
+            if (hostSocket) {
+                // Send directly to the socket that called startGame
+                hostSocket.emit('gameState', state);
+            }
+            else {
+                // Fallback to stored host socket
+                this.sendToHost(code, state);
+            }
+        };
         switch (phase) {
             case GameState_1.GamePhase.AnsweringQuestions:
-                this.sendToHost(code, {
+                sendState({
                     ...baseState,
                     screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                     text: 'Truthfully answer the questions on your device.',
@@ -91,7 +102,7 @@ class SocketHandlers {
                 });
                 break;
             case GameState_1.GamePhase.SubmittingLies:
-                this.sendToHost(code, {
+                sendState({
                     ...baseState,
                     screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                     text: targetPlayer ? `Now submitting lies for ${targetPlayer}!` : 'Submitting lies...',
@@ -99,7 +110,7 @@ class SocketHandlers {
                 });
                 break;
             case GameState_1.GamePhase.VotingOnLies:
-                this.sendToHost(code, {
+                sendState({
                     ...baseState,
                     screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                     text: targetPlayer ? `Voting on lies for ${targetPlayer}!` : 'Voting...',
@@ -127,7 +138,7 @@ class SocketHandlers {
                         isTruth: a.isTruth,
                         voters: voteCounts[a.username] || []
                     }));
-                    this.sendToHost(code, {
+                    sendState({
                         ...baseState,
                         screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
                         text: `Results for ${targetPlayer}!`,
@@ -135,11 +146,11 @@ class SocketHandlers {
                     });
                 }
                 else {
-                    this.sendToHost(code, { ...baseState, screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths });
+                    sendState({ ...baseState, screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths });
                 }
                 break;
             case GameState_1.GamePhase.ShowingPoints:
-                this.sendToHost(code, {
+                sendState({
                     ...baseState,
                     screen: IncludeStuff_1.Screens.h5ShowThePointsForTheRound,
                     text: targetPlayer ? `Points for ${targetPlayer}'s round!` : 'Points!',
@@ -149,7 +160,7 @@ class SocketHandlers {
             case GameState_1.GamePhase.GameOver:
                 const leaderboard = gameState.getLeaderboard();
                 const winner = leaderboard[0];
-                this.sendToHost(code, {
+                sendState({
                     ...baseState,
                     screen: IncludeStuff_1.Screens.h6ShowTheWinner,
                     text: winner ? `Winner: ${winner.name} with ${winner.points} points!` : 'Game Over!',
@@ -157,11 +168,13 @@ class SocketHandlers {
                 });
                 break;
             default:
-                this.sendToHost(code, { ...baseState, screen: IncludeStuff_1.Screens.h1CollectingUsers });
+                sendState({ ...baseState, screen: IncludeStuff_1.Screens.h1CollectingUsers });
         }
     }
     handleConnection(socket) {
         console.log('a user connected', socket.id);
+        // Ask the client to identify themselves
+        socket.emit('identifyMe');
         socket.on('disconnect', () => {
             console.log('user disconnected', socket.id);
         });
@@ -191,6 +204,10 @@ class SocketHandlers {
             if (gameState) {
                 console.log('joining game ' + code);
                 socket.join(code);
+                // Initialize socket tracking if not exists (for loaded games)
+                if (!this.socketStuff[code]) {
+                    this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+                }
                 socket.emit('gameState', {
                     sharedState: gameState.getSharedState(),
                     name: '',
@@ -212,10 +229,29 @@ class SocketHandlers {
                 });
             }
         });
+        // Client identifies themselves as host or player after joining
+        socket.on('identify', ({ role, code, name }) => {
+            // Initialize socket tracking if not exists
+            if (!this.socketStuff[code]) {
+                this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+            }
+            if (role === 'host') {
+                this.socketStuff[code].hostSocketId = socket.id;
+                console.log('>>> HOST IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+            }
+            else if (role === 'player' && name) {
+                this.socketStuff[code].playerSockets[name] = socket.id;
+                console.log('>>> PLAYER ' + name + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+            }
+        });
         socket.on('nameAndEmoji', ({ name, emoji, code }) => {
             var _a, _b;
             const gameState = this.games[code];
             if (gameState) {
+                // Initialize socket tracking if not exists (for loaded games)
+                if (!this.socketStuff[code]) {
+                    this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+                }
                 // If user already exists, replace them (allows reconnection)
                 if (gameState.userExists(name)) {
                     gameState.removeUser(name);
@@ -329,7 +365,8 @@ class SocketHandlers {
                 // If game already in progress, send host to correct screen instead of ignoring
                 if (phase !== GameState_1.GamePhase.CollectingUsers) {
                     console.log('Game already in progress, sending host to correct screen');
-                    this.sendHostToCorrectScreen(code, gameState);
+                    // Send directly to the socket that called startGame (the host)
+                    this.sendHostToCorrectScreen(code, gameState, socket);
                     return;
                 }
                 // Get users BEFORE starting

@@ -30,6 +30,33 @@ function App() {
     error: "",
   });
   const gameStateRef = useRef<ClientGameState>( gameState );
+  
+  // Listen for server asking us to identify
+  useEffect(() => {
+    function onIdentifyMe() {
+      const code = gameStateRef.current?.sharedState?.code;
+      const name = gameStateRef.current?.name;
+      const isHost = name === '<host>' || gameStateRef.current?.screen === Screens.h1CollectingUsers || 
+                     gameStateRef.current?.screen === Screens.h2InformationScreenWithTimer ||
+                     gameStateRef.current?.screen === Screens.h3ShowTheLiesAndTruths ||
+                     gameStateRef.current?.screen === Screens.h5ShowThePointsForTheRound ||
+                     gameStateRef.current?.screen === Screens.h6ShowTheWinner;
+      
+      if (code) {
+        console.log('>>> IDENTIFYING as ' + (isHost ? 'host' : 'player') + ' for game ' + code);
+        socket.emit('identify', { 
+          role: isHost ? 'host' : 'player', 
+          code, 
+          name: isHost ? undefined : name 
+        });
+      }
+    }
+    
+    socket.on('identifyMe', onIdentifyMe);
+    return () => {
+      socket.off('identifyMe', onIdentifyMe);
+    };
+  }, []);
 
   function setGameState( newState: ClientGameState ) {
     const beforeState = gameStateRef.current;
