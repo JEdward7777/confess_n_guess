@@ -120,6 +120,11 @@ li:first-child {
   font-weight: bold;
 }
 
+/* Make all leaderboard items readable */
+li:not(:first-child) {
+  color: #eee;
+}
+
 /* Timer */
 .timer {
   font-size: 3rem;

@@ -86,19 +86,6 @@ function App() {
 
   console.log( "Screen is ", screen );
 
-  function resetGameState() {
-    setGameState({
-      sharedState: {
-        users: {},
-        code: "",
-      },
-      name: "",
-      emoji: "",
-      screen : Screens.g1NewGame,
-      error: "",
-    });
-  }
-
   //show the correct screen based on the screen state.
   return (
     <div className="App">
@@ -113,9 +100,6 @@ function App() {
       {screen === Screens.c2WaitingScreenJustWhateverText && <C2WaitingScreen gameState={gameState} />}
       {screen === Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer && <C3ShowsQuestionAndLetsYouTypeInAnAnswer gameState={gameState} />}
       {screen === Screens.c4PickTheBestAnswerOutOfAList && <C4PickBestAnswer gameState={gameState} />}
-      <p>{screen}</p>
-       {/* Make a reset button */}
-       <button onClick={resetGameState}>Reset</button>
     </div>
   )
 }

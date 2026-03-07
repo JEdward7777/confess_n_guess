@@ -177,7 +177,7 @@ export class SocketHandlers {
                     this.socketStuff[code].playerSockets[name] = socket.id;
                 }
                 
-                console.log('User ' + name + ' joined game ' + code);
+                console.log('User ' + name + ' joined game ' + code + ' (phase: ' + gameState.getPhase() + ')');
                 
                 // Notify host of new user
                 this.sendToHost(code, {
@@ -186,13 +186,67 @@ export class SocketHandlers {
                     screen: this.getHostScreen(gameState)
                 });
                 
-                // Send waiting screen to user (not host)
+                // Determine what screen to send based on game phase
+                const phase = gameState.getPhase();
+                let screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                let textToSend = 'Please wait...';
+                
+                if (phase === GamePhase.CollectingUsers) {
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'Please wait for the host to start the game...';
+                } else if (phase === GamePhase.AnsweringQuestions) {
+                    // Check if user already answered
+                    const userAnswers = gameState['userAnswers'] as any;
+                    if (userAnswers && userAnswers[name]) {
+                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                        textToSend = 'Your answer has been submitted! Please wait for others...';
+                    } else {
+                        // Send question to answer
+                        const questionObj = gameState.getNextQuestion();
+                        screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
+                        textToSend = questionObj ? `Please answer this question:\n\n${questionObj.question}` : 'No question available';
+                    }
+                } else if (phase === GamePhase.SubmittingLies) {
+                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
+                    if (targetPlayer === name) {
+                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                        textToSend = 'Your truth has been submitted! Now others will submit lies for your question.';
+                    } else {
+                        const truth = gameState.getTruthForPlayer(targetPlayer || '');
+                        const userLies = gameState['lies'] as any;
+                        if (userLies && userLies[targetPlayer]?.some((l: any) => l.username === name)) {
+                            screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                            textToSend = 'Your lie has been submitted! Please wait for others...';
+                        } else {
+                            screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
+                            textToSend = truth ? `Write a LIE for this question about ${targetPlayer}:\n\n${truth.question}` : 'No question available';
+                        }
+                    }
+                } else if (phase === GamePhase.VotingOnLies) {
+                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
+                    const userVotes = gameState['votes'] as any;
+                    if (userVotes && userVotes[targetPlayer]?.some((v: any) => v.voter === name)) {
+                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                        textToSend = 'Your vote has been submitted! Please wait for others...';
+                    } else {
+                        screenToSend = Screens.c4PickTheBestAnswerOutOfAList;
+                        textToSend = 'Vote for the TRUTH!';
+                    }
+                } else if (phase === GamePhase.ShowingLieResults || phase === GamePhase.ShowingPoints) {
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'Please wait while results are being shown...';
+                } else if (phase === GamePhase.GameOver) {
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'The game has ended!';
+                }
+                
+                // Send appropriate screen to user
                 socket.emit('gameState', {
                     sharedState: gameState.getSharedState(),
                     name: name,
                     emoji: emoji,
-                    screen: Screens.c2WaitingScreenJustWhateverText,
-                    text: 'Please wait for the host to start the game...'
+                    screen: screenToSend,
+                    text: textToSend
                 });
             } else {
                 socket.emit('gameState', {
@@ -717,15 +771,50 @@ export class SocketHandlers {
                         }
                     }
                 } else {
-                    // Not all answered - just show waiting
-                    this.sendToHost(code, {
-                        screen: Screens.h1CollectingUsers,
-                        text: 'Time is up! Waiting for remaining players...'
-                    });
-                    this.sendToPlayers(code, {
-                        screen: Screens.c2WaitingScreenJustWhateverText,
-                        text: 'Time is up! Waiting for others to finish...'
-                    });
+                    // Not all answered - PROCEED with game using available answers!
+                    // Don't go back to lobby - just continue with who we have
+                    console.log('Timer expired but not all answered - proceeding with ' + 
+                        Object.keys(gameState['userAnswers'] || {}).length + ' answers');
+                    
+                    const firstTarget = gameState.getNextLieTargetPlayer();
+                    if (firstTarget) {
+                        gameState.setCurrentLieTargetPlayer(firstTarget);
+                        gameState.setPhase(GamePhase.SubmittingLies);
+                        gameState.setTimerValue(60);
+                        
+                        const truth = gameState.getTruthForPlayer(firstTarget);
+                        const userNames = gameState.getUserNames();
+                        
+                        this.sendToHost(code, {
+                            screen: Screens.h2InformationScreenWithTimer,
+                            text: 'Now submitting lies for ' + firstTarget + '!',
+                            timerValue: 60
+                        });
+                        
+                        userNames.forEach(username => {
+                            if (username !== firstTarget) {
+                                const socketInfo = this.socketStuff[code];
+                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
+                                    const playerSocketId = socketInfo.playerSockets[username];
+                                    this.io.to(playerSocketId).emit('gameState', {
+                                        screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
+                                        question: truth?.question || '',
+                                        targetPlayer: firstTarget
+                                    });
+                                }
+                            }
+                        });
+                        
+                        const socketInfo = this.socketStuff[code];
+                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
+                            const playerSocketId = socketInfo.playerSockets[firstTarget];
+                            this.io.to(playerSocketId).emit('gameState', {
+                                screen: Screens.c2WaitingScreenJustWhateverText,
+                                text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                            });
+                        }
+                    }
                 }
             }
             else if (phase === GamePhase.SubmittingLies) {
