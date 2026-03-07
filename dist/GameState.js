@@ -56,9 +56,18 @@ class GameState {
         this.currentQuestionIndex = 0;
         this.timerValue = 0;
         this.timerInterval = null;
+        this.timerStartTime = 0;
         this.currentLieTargetPlayer = '';
         this.lies = {};
         this.votes = {};
+    }
+    // Timer management
+    setTimerValue(value) {
+        this.timerValue = value;
+        this.timerStartTime = Date.now();
+    }
+    getTimerStartTime() {
+        return this.timerStartTime;
     }
     // Getters
     getSharedState() {

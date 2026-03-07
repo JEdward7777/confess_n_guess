@@ -168,7 +168,13 @@ class SocketHandlers {
         socket.on('startGame', ({ code }) => {
             const gameState = this.games[code];
             if (gameState) {
-                console.log('Starting game ' + code);
+                console.log('>>> Starting game ' + code + ' <<<');
+                console.log('Current phase before start: ' + gameState.getPhase());
+                // Don't restart if game is already in progress
+                if (gameState.getPhase() !== GameState_1.GamePhase.CollectingUsers) {
+                    console.log('Game already in progress, ignoring startGame');
+                    return;
+                }
                 // Get users BEFORE starting
                 const userNames = gameState.getUserNames();
                 console.log('Users in game:', userNames);
@@ -182,6 +188,8 @@ class SocketHandlers {
                     return;
                 }
                 gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
+                // Set timer start time
+                gameState.setTimerValue(60);
                 // Send timer screen to host only
                 this.sendToHost(code, {
                     screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
@@ -216,15 +224,19 @@ class SocketHandlers {
                 gameState.addAnswer(name, question, answer);
                 // Check if all users have answered
                 if (gameState.allUsersHaveAnswered()) {
+                    console.log('ALL PLAYERS HAVE ANSWERED! Transitioning to lie phase.');
                     // All truths are in! Start the lie phase.
                     // Get first player to target
                     const firstTarget = gameState.getNextLieTargetPlayer();
+                    console.log('First target player:', firstTarget);
                     if (firstTarget) {
                         gameState.setCurrentLieTargetPlayer(firstTarget);
                         gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
+                        gameState.setTimerValue(60);
                         const truth = gameState.getTruthForPlayer(firstTarget);
                         const userNames = gameState.getUserNames();
                         // Send timer to host
+                        console.log('Sending h2 to host with text: Now submitting lies for ' + firstTarget);
                         this.sendToHost(code, {
                             screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                             text: 'Now submitting lies for ' + firstTarget + '!',
@@ -528,8 +540,19 @@ class SocketHandlers {
         });
         socket.on('timerExpired', ({ code }) => {
             const gameState = this.games[code];
+            if (!gameState)
+                return;
             const phase = gameState.getPhase();
+            const prevPhase = gameState.getPhase(); // This is the same, but we'll check in handler
             console.log('Timer expired for game ' + code + ' phase: ' + phase);
+            // If we're no longer in answeringQuestions, ignore this timer event
+            // (It might be from a previous timer that was still running)
+            if (phase !== GameState_1.GamePhase.AnsweringQuestions &&
+                phase !== GameState_1.GamePhase.SubmittingLies &&
+                phase !== GameState_1.GamePhase.VotingOnLies) {
+                console.log('Ignoring timerExpired for phase: ' + phase);
+                return;
+            }
             if (phase === GameState_1.GamePhase.AnsweringQuestions) {
                 // Timer expired during truth phase - check if we have answers, then start lie phase
                 if (gameState.allUsersHaveAnswered()) {

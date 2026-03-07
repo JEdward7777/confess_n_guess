@@ -34,6 +34,8 @@ export class GameState {
     private currentQuestionIndex: number;
     private timerValue: number;
     private timerInterval: NodeJS.Timeout | null;
+    // Timer tracking to prevent stale timer events
+    private timerStartTime: number;
     // Lie phase tracking
     private currentLieTargetPlayer: string;
     private lies: { [targetUsername: string]: Lie[] };
@@ -50,9 +52,20 @@ export class GameState {
         this.currentQuestionIndex = 0;
         this.timerValue = 0;
         this.timerInterval = null;
+        this.timerStartTime = 0;
         this.currentLieTargetPlayer = '';
         this.lies = {};
         this.votes = {};
+    }
+
+    // Timer management
+    setTimerValue(value: number): void {
+        this.timerValue = value;
+        this.timerStartTime = Date.now();
+    }
+
+    getTimerStartTime(): number {
+        return this.timerStartTime;
     }
 
     // Getters
