@@ -188,6 +188,9 @@ export class SocketHandlers {
                 
                 // Send waiting screen to user (not host)
                 socket.emit('gameState', {
+                    sharedState: gameState.getSharedState(),
+                    name: name,
+                    emoji: emoji,
                     screen: Screens.c2WaitingScreenJustWhateverText,
                     text: 'Please wait for the host to start the game...'
                 });
