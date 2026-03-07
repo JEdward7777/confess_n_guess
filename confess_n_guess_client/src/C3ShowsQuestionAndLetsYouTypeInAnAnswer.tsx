@@ -20,6 +20,9 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
     const [targetPlayer, setTargetPlayer] = useState<string>("");
 
     useEffect(() => {
+        // Clear answer when question or target changes
+        setAnswer("");
+        
         if (gameState.question) {
             setStoredQuestion(gameState.question);
         } else if (gameState.text) {
@@ -42,7 +45,7 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
             setIsLieSubmission(false);
             setTargetPlayer("");
         }
-    }, [gameState.question, gameState.text, gameState.targetPlayer]);
+    }, [gameState.question, gameState.text, gameState.targetPlayer, gameState.screen]);
 
     const submitAnswer = () => {
         if (!answer.trim()) {
@@ -73,6 +76,12 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
     const error = gameState.error ?? ""; 
 
     // Use white-space: pre-wrap to render newlines properly instead of <br>
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && answer.trim()) {
+            submitAnswer();
+        }
+    };
+    
     return (
         <div>
             <h1>{isLieSubmission ? `Write a LIE about ${targetPlayer}` : 'Answer the question'}</h1>
@@ -83,6 +92,7 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
                 type="text" 
                 value={answer} 
                 onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder={isLieSubmission ? "Type your lie here..." : "Type your answer here..."}
                 style={{ padding: '10px', fontSize: '16px', width: '300px' }}
             />
