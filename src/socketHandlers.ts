@@ -39,8 +39,11 @@ export class SocketHandlers {
 
     private sendToHost(gameCode: string, data: ClientGameState): void {
         const socketInfo = this.socketStuff[gameCode];
+        console.log('sendToHost called:', { gameCode, hasSocketInfo: !!socketInfo, hostSocketId: socketInfo?.hostSocketId, screen: data.screen });
         if (socketInfo && socketInfo.hostSocketId) {
             this.io.to(socketInfo.hostSocketId).emit('gameState', data);
+        } else {
+            console.log('WARNING: sendToHost no host socket found for game', gameCode);
         }
     }
 
