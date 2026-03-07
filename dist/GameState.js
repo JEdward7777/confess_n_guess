@@ -286,6 +286,13 @@ class GameState {
         const nextIndex = currentIndex + 1;
         return nextIndex < userNames.length ? userNames[nextIndex] : null;
     }
+    // Advance to next lie target player
+    nextLieTarget() {
+        const next = this.getNextLieTargetPlayer();
+        if (next) {
+            this.currentLieTargetPlayer = next;
+        }
+    }
     // Check if all lie rounds are done
     isLiePhaseDone() {
         return this.getNextLieTargetPlayer() === null && this.currentLieTargetPlayer !== '';
