@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Screens = void 0;
-//declare an enum for screens
 var Screens;
 (function (Screens) {
     Screens[Screens["g1NewGame"] = 0] = "g1NewGame";

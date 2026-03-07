@@ -5,6 +5,18 @@ export interface UserPoints {
 }
 
   //declare an enum for screens
+export interface UserAnswer {
+    username: string;
+    answer: string;
+    isTruth: boolean;
+}
+
+export interface LeaderboardEntry {
+    name: string;
+    emoji: string;
+    points: number;
+}
+
 export enum Screens {
     g1NewGame = 0,
     h1CollectingUsers = 1,
@@ -34,5 +46,9 @@ export interface ClientGameState {
     screen?: Screens,
     error?: string,
     question?: string,
+    questionIndex?: number,
     text?: string,
+    timerValue?: number,
+    answers?: UserAnswer[],
+    leaderboard?: LeaderboardEntry[],
 }

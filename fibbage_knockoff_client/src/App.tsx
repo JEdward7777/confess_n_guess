@@ -8,8 +8,14 @@ import React, { useEffect } from 'react';
 //@ts-ignore
 import {socket } from './socket';
 import C1TypeInYourNameAndPickAnEmojiForYourPicturePage from './C1TypeInYourNameAndPickAnEmojiForYourPicturePage';
+import C2WaitingScreen from './C2WaitingScreen';
 import C3ShowsQuestionAndLetsYouTypeInAnAnswer from './C3ShowsQuestionAndLetsYouTypeInAnAnswer';
+import C4PickBestAnswer from './C4PickBestAnswer';
 import H2InformationScreenWithTimer from './H2InformationScreenWithTimer';
+import H3ShowLiesAndTruths from './H3ShowLiesAndTruths';
+import H4IterateAnswers from './H4IterateAnswers';
+import H5ShowPoints from './H5ShowPoints';
+import H6ShowWinner from './H6ShowWinner';
 
 function App() {
   //have a state representing what screen we are on.
@@ -93,22 +99,20 @@ function App() {
     });
   }
 
-  //TODO: Create the next page for the client.
-
   //show the correct screen based on the screen state.
   return (
     <div className="App">
-      {screen === Screens.g1NewGame                    && <G1NewGamePage                gameState={gameState} />}
-      {screen === Screens.h1CollectingUsers            && <H1CollectingUsersPage        gameState={gameState} />}
-      {screen === Screens.h2InformationScreenWithTimer && <H2InformationScreenWithTimer gameState={gameState} />}{/* 
-      {screen === Screens.h3ShowTheLiesAndTruths && <h3ShowTheLiesAndTruths />}
-      {screen === Screens.h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo && <h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo />}
-      {screen === Screens.h5ShowThePointsForTheRound && <h5ShowThePointsForTheRound />}
-      {screen === Screens.h6ShowTheWinner && <h6ShowTheWinner />}}*/}
-      {screen === Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture && <C1TypeInYourNameAndPickAnEmojiForYourPicturePage gameState={gameState}/>}{/* 
-      {screen === Screens.c2WaitingScreenJustWhateverText && <c2WaitingScreenJustWhateverText />}*/}
-      {screen === Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer && <C3ShowsQuestionAndLetsYouTypeInAnAnswer gameState={gameState} />}{/*
-      {screen === Screens.c4PickTheBestAnswerOutOfAList && <c4PickTheBestAnswerOutOfAList />} */}
+      {screen === Screens.g1NewGame && <G1NewGamePage gameState={gameState} />}
+      {screen === Screens.h1CollectingUsers && <H1CollectingUsersPage gameState={gameState} />}
+      {screen === Screens.h2InformationScreenWithTimer && <H2InformationScreenWithTimer gameState={gameState} />}
+      {screen === Screens.h3ShowTheLiesAndTruths && <H3ShowLiesAndTruths gameState={gameState} />}
+      {screen === Screens.h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo && <H4IterateAnswers gameState={gameState} />}
+      {screen === Screens.h5ShowThePointsForTheRound && <H5ShowPoints gameState={gameState} />}
+      {screen === Screens.h6ShowTheWinner && <H6ShowWinner gameState={gameState} />}
+      {screen === Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture && <C1TypeInYourNameAndPickAnEmojiForYourPicturePage gameState={gameState}/>}
+      {screen === Screens.c2WaitingScreenJustWhateverText && <C2WaitingScreen gameState={gameState} />}
+      {screen === Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer && <C3ShowsQuestionAndLetsYouTypeInAnAnswer gameState={gameState} />}
+      {screen === Screens.c4PickTheBestAnswerOutOfAList && <C4PickBestAnswer gameState={gameState} />}
       <p>{screen}</p>
        {/* Make a reset button */}
        <button onClick={resetGameState}>Reset</button>
