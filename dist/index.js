@@ -9,7 +9,7 @@ const fs = require("fs");
 const socket_io_1 = require("socket.io");
 const GameState_1 = require("./GameState");
 const socketHandlers_1 = require("./socketHandlers");
-var httpPath = path.join(__dirname, "../fibbage_knockoff_client/dist/");
+var httpPath = path.join(__dirname, "../confess_n_guess_client/dist/");
 app.use(express.static(httpPath));
 // Game state store
 const games = {};

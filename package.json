@@ -1,12 +1,12 @@
 {
-  "name": "fibbage_knockoff",
+  "name": "confess_n_guess",
   "version": "1.0.0",
   "description": "A knockoff of fibbage LLM style.",
   "main": "index.js",
   "scripts": {
     "start": "node dist/index.js",
     "build_server": "tsc",
-    "build_client": "(cd fibbage_knockoff_client && npm run build)",
+    "build_client": "(cd confess_n_guess_client && npm run build)",
     "build": "npm run build_client && npm run build_server",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

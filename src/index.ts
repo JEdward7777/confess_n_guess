@@ -13,7 +13,7 @@ import { GameState } from "./GameState";
 import { SocketHandlers } from "./socketHandlers";
 import { Screens, ClientGameState } from "./IncludeStuff";
 
-var httpPath = path.join(__dirname, "../fibbage_knockoff_client/dist/");
+var httpPath = path.join(__dirname, "../confess_n_guess_client/dist/");
 app.use(express.static(httpPath));
 
 // Game state store
