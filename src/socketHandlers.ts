@@ -223,6 +223,9 @@ export class SocketHandlers {
                 
                 gameState.setPhase(GamePhase.AnsweringQuestions);
                 
+                // Get the question ONCE before the loop (not inside!)
+                const questionObj = gameState.getNextQuestion();
+                
                 // Send timer screen to host only
                 this.sendToHost(code, {
                     screen: Screens.h2InformationScreenWithTimer,
@@ -230,9 +233,8 @@ export class SocketHandlers {
                     timerValue: 60
                 });
                 
-                // Assign questions to each player and send them the question screen
+                // Assign SAME question to each player
                 userNames.forEach(username => {
-                    const questionObj = gameState.getNextQuestion();
                     if (questionObj) {
                         // Send to specific player using their socket
                         const socketInfo = this.socketStuff[code];

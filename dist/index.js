@@ -44,7 +44,9 @@ const socketHandlers = new socketHandlers_1.SocketHandlers(io, games);
 io.on('connection', (socket) => {
     socketHandlers.handleConnection(socket);
 });
-server.listen(3001, () => {
-    console.log('listening on *:3001');
+// Get port from command line argument or use default
+const PORT = process.argv[2] ? parseInt(process.argv[2], 10) : 3001;
+server.listen(PORT, () => {
+    console.log('listening on *:' + PORT);
 });
 //# sourceMappingURL=index.js.map
