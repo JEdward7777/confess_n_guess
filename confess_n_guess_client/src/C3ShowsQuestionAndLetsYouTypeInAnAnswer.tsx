@@ -15,6 +15,9 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
     const [answer, setAnswer] = useState<string>("");
     // Store the question from gameState so it doesn't change
     const [storedQuestion, setStoredQuestion] = useState<string>("");
+    // Check if this is a lie submission (has targetPlayer)
+    const [isLieSubmission, setIsLieSubmission] = useState<boolean>(false);
+    const [targetPlayer, setTargetPlayer] = useState<string>("");
 
     useEffect(() => {
         if (gameState.question) {
@@ -22,6 +25,7 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
         } else if (gameState.text) {
             // Extract question from text if question field not set
             // The text format is: "Please truthfully answer this question:\n\n{question}"
+            // or "Write a LIE for this question about {player}:\n\n{question}"
             const lines = gameState.text.split('\n\n');
             if (lines.length > 1) {
                 setStoredQuestion(lines[lines.length - 1]);
@@ -29,18 +33,40 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
                 setStoredQuestion(gameState.text);
             }
         }
-    }, [gameState.question, gameState.text]);
+        
+        // Check if this is a lie submission
+        if (gameState.targetPlayer) {
+            setIsLieSubmission(true);
+            setTargetPlayer(gameState.targetPlayer);
+        } else {
+            setIsLieSubmission(false);
+            setTargetPlayer("");
+        }
+    }, [gameState.question, gameState.text, gameState.targetPlayer]);
 
-    const sendAnswer = () => {
+    const submitAnswer = () => {
         if (!answer.trim()) {
             return; // Don't send empty answers
         }
-        socket.emit("sendQuestionAnswer", {
-            name: gameState?.name, 
-            code: gameState?.sharedState?.code ?? "", 
-            answer: answer,
-            question: storedQuestion
-        });
+        
+        if (isLieSubmission) {
+            // Submit a lie
+            socket.emit("submitLie", {
+                name: gameState?.name, 
+                code: gameState?.sharedState?.code ?? "", 
+                lie: answer,
+                targetPlayer: targetPlayer,
+                question: storedQuestion
+            });
+        } else {
+            // Submit a truth answer
+            socket.emit("sendQuestionAnswer", {
+                name: gameState?.name, 
+                code: gameState?.sharedState?.code ?? "", 
+                answer: answer,
+                question: storedQuestion
+            });
+        }
     }
 
 
@@ -49,7 +75,7 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
     // Use white-space: pre-wrap to render newlines properly instead of <br>
     return (
         <div>
-            <h1>Answer the question</h1>
+            <h1>{isLieSubmission ? `Write a LIE about ${targetPlayer}` : 'Answer the question'}</h1>
             <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px' }}>
                 {storedQuestion}
             </div>
@@ -57,15 +83,15 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
                 type="text" 
                 value={answer} 
                 onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Type your answer here..."
+                placeholder={isLieSubmission ? "Type your lie here..." : "Type your answer here..."}
                 style={{ padding: '10px', fontSize: '16px', width: '300px' }}
             />
             <button 
-                onClick={sendAnswer}
+                onClick={submitAnswer}
                 disabled={!answer.trim()}
                 style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px' }}
             >
-                Submit
+                {isLieSubmission ? 'Submit Lie' : 'Submit'}
             </button>
             {error && <p>{error}</p>}
         </div>

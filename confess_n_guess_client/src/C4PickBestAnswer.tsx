@@ -13,9 +13,13 @@ interface C4PickBestAnswerProps {
 const C4PickBestAnswer = ({ gameState }: C4PickBestAnswerProps) => {
 
     const handleSelectAnswer = (username: string) => {
-        socket.emit('selectAnswer', { 
+        // Send vote - targetPlayer comes from sharedState or we need to track it
+        const targetPlayer = (gameState as any).targetPlayer || '';
+        socket.emit('voteOnLie', { 
+            name: gameState?.name,
             code: gameState?.sharedState?.code ?? "", 
-            selectedUsername: username 
+            selectedUsername: username,
+            targetPlayer: targetPlayer
         });
     }
 
@@ -24,14 +28,17 @@ const C4PickBestAnswer = ({ gameState }: C4PickBestAnswerProps) => {
 
     return (
         <div>
-            <h1>Pick the Best Answer</h1>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+            <h1>Which one is the TRUTH?</h1>
+            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px' }}>{text}</div>
             <div>
                 {answers.map((answer: UserAnswer) => (
-                    <div key={answer.username} style={{ margin: '10px', padding: '10px', border: '1px solid #ccc' }}>
-                        <p>{answer.answer}</p>
-                        <button onClick={() => handleSelectAnswer(answer.username)}>
-                            Select
+                    <div key={answer.username} style={{ margin: '10px', padding: '15px', border: '2px solid #444', borderRadius: '8px' }}>
+                        <p style={{ fontSize: '18px' }}>{answer.answer}</p>
+                        <button 
+                            onClick={() => handleSelectAnswer(answer.username)}
+                            style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
+                        >
+                            Select as Truth
                         </button>
                     </div>
                 ))}

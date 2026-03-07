@@ -5,7 +5,9 @@ var GamePhase;
 (function (GamePhase) {
     GamePhase["CollectingUsers"] = "collectingUsers";
     GamePhase["AnsweringQuestions"] = "answeringQuestions";
-    GamePhase["PickingBestAnswer"] = "pickingBestAnswer";
+    GamePhase["SubmittingLies"] = "submittingLies";
+    GamePhase["VotingOnLies"] = "votingOnLies";
+    GamePhase["ShowingLieResults"] = "showingLieResults";
     GamePhase["ShowingPoints"] = "showingPoints";
     GamePhase["GameOver"] = "gameOver";
 })(GamePhase || (exports.GamePhase = GamePhase = {}));
@@ -54,6 +56,9 @@ class GameState {
         this.currentQuestionIndex = 0;
         this.timerValue = 0;
         this.timerInterval = null;
+        this.currentLieTargetPlayer = '';
+        this.lies = {};
+        this.votes = {};
     }
     // Getters
     getSharedState() {
@@ -168,6 +173,119 @@ class GameState {
         return Object.values(this.sharedState.users)
             .filter(user => user.name !== '<host>')
             .sort((a, b) => b.points - a.points);
+    }
+    // === LIE PHASE METHODS ===
+    // Get the next player to target for lies
+    getCurrentLieTargetPlayer() {
+        return this.currentLieTargetPlayer;
+    }
+    setCurrentLieTargetPlayer(player) {
+        this.currentLieTargetPlayer = player;
+    }
+    // Get the truth answer for a player
+    getTruthForPlayer(username) {
+        return this.userAnswers[username] || null;
+    }
+    // Add a lie for the target player
+    addLie(targetUsername, lieUsername, lie) {
+        if (!this.lies[targetUsername]) {
+            this.lies[targetUsername] = [];
+        }
+        this.lies[targetUsername].push({ username: lieUsername, lie });
+    }
+    // Get all lies for a target player
+    getLiesForPlayer(targetUsername) {
+        return this.lies[targetUsername] || [];
+    }
+    // Check if all OTHER players have submitted lies for target
+    allLiesSubmittedForTarget(targetUsername) {
+        var _a;
+        const userNames = this.getUserNames();
+        // All players except the target should submit a lie
+        const otherPlayers = userNames.filter(name => name !== targetUsername);
+        const submittedLiers = ((_a = this.lies[targetUsername]) === null || _a === void 0 ? void 0 : _a.map(l => l.username)) || [];
+        return otherPlayers.every(name => submittedLiers.includes(name));
+    }
+    // Add a vote
+    addVote(targetUsername, voter, selectedUsername) {
+        if (!this.votes[targetUsername]) {
+            this.votes[targetUsername] = [];
+        }
+        this.votes[targetUsername].push({ voter, selectedUsername });
+    }
+    // Get all votes for a target
+    getVotesForPlayer(targetUsername) {
+        return this.votes[targetUsername] || [];
+    }
+    // Check if all players (except target) have voted
+    allVotesSubmittedForTarget(targetUsername) {
+        var _a;
+        const userNames = this.getUserNames();
+        // All players except the target and the truth-owner should vote
+        const voters = userNames.filter(name => name !== targetUsername);
+        const votedPlayers = ((_a = this.votes[targetUsername]) === null || _a === void 0 ? void 0 : _a.map(v => v.voter)) || [];
+        return voters.every(name => votedPlayers.includes(name));
+    }
+    // Calculate and award points for lie round
+    calculateLiePoints(targetUsername) {
+        const truth = this.userAnswers[targetUsername];
+        const lies = this.lies[targetUsername] || [];
+        const votes = this.votes[targetUsername] || [];
+        if (!truth)
+            return;
+        // Build list of all answers (truth + lies) with their authors
+        const allAnswers = [
+            { username: targetUsername, answer: truth.answer, isTruth: true },
+            ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
+        ];
+        // Count votes for each answer
+        const voteCounts = {};
+        votes.forEach(v => {
+            voteCounts[v.selectedUsername] = (voteCounts[v.selectedUsername] || 0) + 1;
+        });
+        // Award points
+        allAnswers.forEach(answer => {
+            const numVotes = voteCounts[answer.username] || 0;
+            if (answer.isTruth) {
+                // Truth owner gets 1000 per person who guessed correctly
+                if (numVotes > 0) {
+                    this.addPoints(answer.username, numVotes * 1000);
+                }
+            }
+            else {
+                // Lie creator gets 500 per person they fooled
+                if (numVotes > 0) {
+                    this.addPoints(answer.username, numVotes * 500);
+                }
+            }
+        });
+        // Voters who picked truth get 1000 each
+        votes.forEach(v => {
+            if (v.selectedUsername === targetUsername) {
+                this.addPoints(v.voter, 1000);
+            }
+        });
+    }
+    // Get next player for lie round, or null if done
+    getNextLieTargetPlayer() {
+        const userNames = this.getUserNames();
+        const currentIndex = userNames.indexOf(this.currentLieTargetPlayer);
+        if (currentIndex === -1) {
+            // First player
+            return userNames.length > 0 ? userNames[0] : null;
+        }
+        const nextIndex = currentIndex + 1;
+        return nextIndex < userNames.length ? userNames[nextIndex] : null;
+    }
+    // Check if all lie rounds are done
+    isLiePhaseDone() {
+        return this.getNextLieTargetPlayer() === null && this.currentLieTargetPlayer !== '';
+    }
+    // Reset lies and votes for new game
+    resetLieData() {
+        this.lies = {};
+        this.votes = {};
+        this.currentLieTargetPlayer = '';
     }
     // Serialize for saving
     toJSON() {

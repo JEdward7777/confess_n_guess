@@ -9,6 +9,7 @@ export interface UserAnswer {
     username: string;
     answer: string;
     isTruth: boolean;
+    voters?: string[];  // Who voted for this answer
 }
 
 export interface LeaderboardEntry {
@@ -51,4 +52,5 @@ export interface ClientGameState {
     timerValue?: number,
     answers?: UserAnswer[],
     leaderboard?: LeaderboardEntry[],
+    targetPlayer?: string,
 }
