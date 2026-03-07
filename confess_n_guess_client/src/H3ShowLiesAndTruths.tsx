@@ -60,8 +60,8 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
     return (
         <div>
-            <h1>{allRevealed ? "Results Revealed!" : "Drumroll..."}</h1>
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px' }}>{text}</div>
+            <h1 style={{ color: '#333' }}>{allRevealed ? "Results Revealed!" : "Drumroll..."}</h1>
+            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px', color: '#333' }}>{text}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {answers.map((answer: UserAnswer, index: number) => {
                     const voters = (answer as any).voters || [];
