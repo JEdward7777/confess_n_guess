@@ -184,11 +184,17 @@ class SocketHandlers {
      * Sends a player to the correct screen based on game state and their name.
      * This is the single source of truth for where a player should be.
      * Used for reconnects and when players send events at wrong times.
+     * @param code Game code
+     * @param gameState Current game state
+     * @param playerName Name of player to send
+     * @param socket Player's socket connection
+     * @param customTarget Optional override for target player (used when transitioning between lie rounds)
      */
-    sendPlayerToCorrectScreen(code, gameState, playerName, socket) {
+    sendPlayerToCorrectScreen(code, gameState, playerName, socket, customTarget) {
         var _a, _b;
         const phase = gameState.getPhase();
-        const targetPlayer = gameState.getCurrentLieTargetPlayer();
+        // Use custom target if provided, otherwise use game state
+        const targetPlayer = customTarget || gameState.getCurrentLieTargetPlayer();
         const baseState = {
             sharedState: gameState.getSharedState(),
             name: playerName
@@ -771,43 +777,28 @@ class SocketHandlers {
         socket.on('continueFromScores', ({ code }) => {
             const gameState = this.games[code];
             if (gameState && gameState.getPhase() === GameState_1.GamePhase.ShowingPoints) {
-                const targetPlayer = gameState.getCurrentLieTargetPlayer();
                 const hasMoreTargets = gameState.getNextLieTargetPlayer() !== null;
                 if (hasMoreTargets) {
                     // More players to process - move to next lie target
                     gameState.nextLieTarget();
-                    const nextTargetPlayer = gameState.getCurrentLieTargetPlayer();
                     gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
                     gameState.setTimerValue(60);
+                    // Send timer to host
+                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                        text: nextTargetPlayer + ' - submit your lies!',
+                        text: targetPlayer + ' - submit your lies!',
                         timerValue: 60
                     });
-                    const nextTruth = gameState.getTruthForPlayer(nextTargetPlayer);
+                    // Send each player to correct screen using the centralized function
                     const userNames = gameState.getUserNames();
                     const socketInfo = this.socketStuff[code];
-                    // Send lie submission to all EXCEPT the target (they wait)
                     userNames.forEach(username => {
-                        if (username !== nextTargetPlayer && socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const playerSocketId = socketInfo.playerSockets[username];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: IncludeStuff_1.Screens.c5SubmitLie,
-                                text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
-                                question: nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question,
-                                targetPlayer: nextTargetPlayer,
-                                instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
-                            });
+                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
+                            const playerSocket = socketInfo.playerSockets[username];
+                            this.sendPlayerToCorrectScreen(code, gameState, username, this.io.sockets.sockets.get(playerSocket));
                         }
                     });
-                    // Send waiting to target player
-                    if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
-                        const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
-                        this.io.to(playerSocketId).emit('gameState', {
-                            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                            text: nextTargetPlayer + ' is writing a lie! Wait for your turn...'
-                        });
-                    }
                 }
                 else {
                     // No more players - end game
