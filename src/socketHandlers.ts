@@ -343,7 +343,7 @@ export class SocketHandlers {
         }
         
         // Send the corrected state to the player
-        socket.emit('gameState', {
+        const emitState: any = {
             ...baseState,
             screen: screenToSend,
             text: textToSend,
@@ -351,7 +351,14 @@ export class SocketHandlers {
             instructionText: instructionText,
             answers: answers,
             leaderboard: phase === GamePhase.GameOver || phase === GamePhase.ShowingPoints ? gameState.getLeaderboard() : undefined
-        });
+        };
+        
+        // Add targetPlayer for lie-related phases
+        if (targetPlayer && (phase === GamePhase.SubmittingLies || phase === GamePhase.VotingOnLies)) {
+            emitState.targetPlayer = targetPlayer;
+        }
+        
+        socket.emit('gameState', emitState);
     }
 
     handleConnection(socket: Socket): void {
@@ -523,6 +530,9 @@ export class SocketHandlers {
                     return;
                 }
                 
+                // Reset lie data for new game
+                gameState.resetLieData();
+                
                 gameState.setPhase(GamePhase.AnsweringQuestions);
                 
                 // Set timer start time
@@ -658,6 +668,14 @@ export class SocketHandlers {
                     return;
                 }
                 
+                // Verify the targetPlayer matches the current lie target
+                const currentTarget = gameState.getCurrentLieTargetPlayer();
+                if (targetPlayer !== currentTarget) {
+                    console.log('ERROR: Received lie for wrong target. Expected ' + currentTarget + ' but got ' + targetPlayer);
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+                
                 console.log('User ' + name + ' submitted lie for ' + targetPlayer + ': ' + lie);
                 
                 // Store the lie
@@ -739,6 +757,14 @@ export class SocketHandlers {
                 // Check if this event makes sense for the current game state
                 if (gameState.getPhase() !== GamePhase.VotingOnLies) {
                     console.log('ERROR: Received vote but not in VotingOnLies phase. Resyncing player.');
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+                
+                // Verify the targetPlayer matches the current lie target
+                const currentTarget = gameState.getCurrentLieTargetPlayer();
+                if (targetPlayer !== currentTarget) {
+                    console.log('ERROR: Received vote for wrong target. Expected ' + currentTarget + ' but got ' + targetPlayer);
                     this.sendPlayerToCorrectScreen(code, gameState, name, socket);
                     return;
                 }

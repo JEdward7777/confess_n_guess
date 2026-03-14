@@ -308,7 +308,7 @@ class SocketHandlers {
                 textToSend = 'Please wait...';
         }
         // Send the corrected state to the player
-        socket.emit('gameState', {
+        const emitState = {
             ...baseState,
             screen: screenToSend,
             text: textToSend,
@@ -316,7 +316,12 @@ class SocketHandlers {
             instructionText: instructionText,
             answers: answers,
             leaderboard: phase === GameState_1.GamePhase.GameOver || phase === GameState_1.GamePhase.ShowingPoints ? gameState.getLeaderboard() : undefined
-        });
+        };
+        // Add targetPlayer for lie-related phases
+        if (targetPlayer && (phase === GameState_1.GamePhase.SubmittingLies || phase === GameState_1.GamePhase.VotingOnLies)) {
+            emitState.targetPlayer = targetPlayer;
+        }
+        socket.emit('gameState', emitState);
     }
     handleConnection(socket) {
         console.log('a user connected', socket.id);
@@ -460,6 +465,8 @@ class SocketHandlers {
                     });
                     return;
                 }
+                // Reset lie data for new game
+                gameState.resetLieData();
                 gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
                 // Set timer start time
                 gameState.setTimerValue(60);
@@ -569,6 +576,13 @@ class SocketHandlers {
                     this.sendPlayerToCorrectScreen(code, gameState, name, socket);
                     return;
                 }
+                // Verify the targetPlayer matches the current lie target
+                const currentTarget = gameState.getCurrentLieTargetPlayer();
+                if (targetPlayer !== currentTarget) {
+                    console.log('ERROR: Received lie for wrong target. Expected ' + currentTarget + ' but got ' + targetPlayer);
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
                 console.log('User ' + name + ' submitted lie for ' + targetPlayer + ': ' + lie);
                 // Store the lie
                 gameState.addLie(targetPlayer, name, lie);
@@ -635,6 +649,13 @@ class SocketHandlers {
                 // Check if this event makes sense for the current game state
                 if (gameState.getPhase() !== GameState_1.GamePhase.VotingOnLies) {
                     console.log('ERROR: Received vote but not in VotingOnLies phase. Resyncing player.');
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+                // Verify the targetPlayer matches the current lie target
+                const currentTarget = gameState.getCurrentLieTargetPlayer();
+                if (targetPlayer !== currentTarget) {
+                    console.log('ERROR: Received vote for wrong target. Expected ' + currentTarget + ' but got ' + targetPlayer);
                     this.sendPlayerToCorrectScreen(code, gameState, name, socket);
                     return;
                 }
