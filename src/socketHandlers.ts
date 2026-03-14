@@ -2,6 +2,11 @@ import { Server, Socket } from 'socket.io';
 import { GameState, GamePhase } from './GameState';
 import { Screens, ClientGameState } from './IncludeStuff';
 
+// Normalize game code to uppercase for case-insensitive matching
+function normalizeCode(code: string): string {
+    return code?.toUpperCase() ?? '';
+}
+
 // Fisher-Yates shuffle - proper unbiased shuffle
 function shuffleArray<T>(array: T[]): T[] {
     const result = [...array];
@@ -400,6 +405,7 @@ export class SocketHandlers {
         });
 
         socket.on('joinGame', (code: string) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -434,6 +440,7 @@ export class SocketHandlers {
 
         // Client identifies themselves as host or player after joining
         socket.on('identify', ({ role, code, name }: { role: 'host' | 'player', code: string, name?: string }) => {
+            code = normalizeCode(code);
             // Initialize socket tracking if not exists
             if (!this.socketStuff[code]) {
                 this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
@@ -449,6 +456,7 @@ export class SocketHandlers {
         });
 
         socket.on('nameAndEmoji', ({ name, emoji, code }: { name: string; emoji: string; code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -500,6 +508,7 @@ export class SocketHandlers {
         });
 
         socket.on('startGame', ({ code }: { code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -573,6 +582,7 @@ export class SocketHandlers {
             answer: string;
             question: string;
         }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -658,6 +668,7 @@ export class SocketHandlers {
             targetPlayer: string;
             question: string;
         }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -751,6 +762,7 @@ export class SocketHandlers {
             selectedUsername: string;
             targetPlayer: string;
         }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -840,6 +852,7 @@ export class SocketHandlers {
         });
 
         socket.on('selectBestAnswer', ({ code, selectedUsername }: { code: string; selectedUsername: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -876,6 +889,7 @@ export class SocketHandlers {
         });
 
         socket.on('nextRound', ({ code }: { code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -909,6 +923,7 @@ export class SocketHandlers {
 
         // Host clicks continue on results screen
         socket.on('continueFromResults', ({ code }: { code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState && gameState.getPhase() === GamePhase.ShowingLieResults) {
@@ -930,6 +945,7 @@ export class SocketHandlers {
 
         // Host clicks continue on scores screen
         socket.on('continueFromScores', ({ code }: { code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState && gameState.getPhase() === GamePhase.ShowingPoints) {
@@ -981,6 +997,7 @@ export class SocketHandlers {
 
 
         socket.on('endGame', ({ code }: { code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             
             if (gameState) {
@@ -1005,6 +1022,7 @@ export class SocketHandlers {
         });
 
         socket.on('timerExpired', ({ code }: { code: string }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (!gameState) return;
             

@@ -3,6 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocketHandlers = void 0;
 const GameState_1 = require("./GameState");
 const IncludeStuff_1 = require("./IncludeStuff");
+// Normalize game code to uppercase for case-insensitive matching
+function normalizeCode(code) {
+    var _a;
+    return (_a = code === null || code === void 0 ? void 0 : code.toUpperCase()) !== null && _a !== void 0 ? _a : '';
+}
 // Fisher-Yates shuffle - proper unbiased shuffle
 function shuffleArray(array) {
     const result = [...array];
@@ -352,6 +357,7 @@ class SocketHandlers {
             });
         });
         socket.on('joinGame', (code) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 console.log('joining game ' + code);
@@ -383,6 +389,7 @@ class SocketHandlers {
         });
         // Client identifies themselves as host or player after joining
         socket.on('identify', ({ role, code, name }) => {
+            code = normalizeCode(code);
             // Initialize socket tracking if not exists
             if (!this.socketStuff[code]) {
                 this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
@@ -397,6 +404,7 @@ class SocketHandlers {
             }
         });
         socket.on('nameAndEmoji', ({ name, emoji, code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 // Initialize socket tracking if not exists (for loaded games)
@@ -441,6 +449,7 @@ class SocketHandlers {
             }
         });
         socket.on('startGame', ({ code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 console.log('>>> Starting game ' + code + ' <<<');
@@ -498,6 +507,7 @@ class SocketHandlers {
             }
         });
         socket.on('sendQuestionAnswer', ({ name, code, answer, question }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 // Check if this event makes sense for the current game state
@@ -568,6 +578,7 @@ class SocketHandlers {
         });
         // Handler for submitting a lie
         socket.on('submitLie', ({ name, code, lie, targetPlayer, question }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 // Check if this event makes sense for the current game state
@@ -644,6 +655,7 @@ class SocketHandlers {
         });
         // Handler for voting on lies
         socket.on('voteOnLie', ({ name, code, selectedUsername, targetPlayer }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 // Check if this event makes sense for the current game state
@@ -721,6 +733,7 @@ class SocketHandlers {
             }
         });
         socket.on('selectBestAnswer', ({ code, selectedUsername }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 // This is a legacy handler - we now use voteOnLie instead
@@ -750,6 +763,7 @@ class SocketHandlers {
             }
         });
         socket.on('nextRound', ({ code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 // Start a new round
@@ -779,6 +793,7 @@ class SocketHandlers {
         });
         // Host clicks continue on results screen
         socket.on('continueFromResults', ({ code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState && gameState.getPhase() === GameState_1.GamePhase.ShowingLieResults) {
                 gameState.setPhase(GameState_1.GamePhase.ShowingPoints);
@@ -796,6 +811,7 @@ class SocketHandlers {
         });
         // Host clicks continue on scores screen
         socket.on('continueFromScores', ({ code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState && gameState.getPhase() === GameState_1.GamePhase.ShowingPoints) {
                 const hasMoreTargets = gameState.getNextLieTargetPlayer() !== null;
@@ -838,6 +854,7 @@ class SocketHandlers {
             }
         });
         socket.on('endGame', ({ code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
                 gameState.setPhase(GameState_1.GamePhase.GameOver);
@@ -857,6 +874,7 @@ class SocketHandlers {
             }
         });
         socket.on('timerExpired', ({ code }) => {
+            code = normalizeCode(code);
             const gameState = this.games[code];
             if (!gameState)
                 return;
