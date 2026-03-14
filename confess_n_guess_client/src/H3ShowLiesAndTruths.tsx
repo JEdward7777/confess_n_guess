@@ -76,12 +76,12 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
     // Auto-continue timer: 60 seconds after all revealed (for host only)
     const [countdown, setCountdown] = useState<number | null>(null);
-    
+
     useEffect(() => {
         if (allDone && isHost && countdown === null) {
             setCountdown(60);
         }
-        
+
         if (countdown !== null && countdown > 0) {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
@@ -91,17 +91,17 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
             setCountdown(null);
         }
     }, [allDone, isHost, countdown]);
-    
+
     // Get current answer
     const currentAnswer = sortedAnswers[currentIndex];
     const voters = currentAnswer ? (currentAnswer as any).voters || [] : [];
 
     // Dark theme styles - use inline styles to bypass App constraints
     return (
-        <div style={{ 
-            backgroundColor: '#1a1a1a', 
-            minHeight: '100vh', 
-            color: '#fff', 
+        <div style={{
+            backgroundColor: '#1a1a1a',
+            minHeight: '100vh',
+            color: '#fff',
             padding: '20px',
             position: 'absolute',
             top: 0,
@@ -110,12 +110,12 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         }}>
             <h1 style={{ color: '#fff' }}>{allDone ? "Truth Revealed!" : "Drumroll..."}</h1>
             <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px', color: '#ccc' }}>{text}</div>
-            
+
             {/* Show the final truth entry when all done, otherwise show current entry */}
             {currentAnswer && (
-                <div style={{ 
-                    margin: '10px', 
-                    padding: '20px', 
+                <div style={{
+                    margin: '10px',
+                    padding: '20px',
                     border: currentAnswer.isTruth ? '3px solid #4CAF50' : '2px solid #555',
                     borderRadius: '10px',
                     backgroundColor: currentAnswer.isTruth ? '#1e3a1e' : '#2d2d2d',
@@ -126,8 +126,8 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                         <>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                                 {currentAnswer.isTruth && (
-                                    <span style={{ 
-                                        color: '#1a1a1a', 
+                                    <span style={{
+                                        color: '#1a1a1a',
                                         fontWeight: 'bold',
                                         backgroundColor: '#4CAF50',
                                         padding: '4px 12px',
@@ -137,8 +137,8 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                                     </span>
                                 )}
                                 {!currentAnswer.isTruth && (
-                                    <span style={{ 
-                                        color: '#1a1a1a', 
+                                    <span style={{
+                                        color: '#1a1a1a',
                                         fontWeight: 'bold',
                                         backgroundColor: '#888',
                                         padding: '4px 12px',
@@ -180,26 +180,26 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                             )}
                             {hasVoters && voters.length === 0 && (
                                 <div style={{ marginTop: '10px', fontSize: '16px', color: '#888' }}>
-                                    No votes yet
+                                    No votes
                                 </div>
                             )}
                         </>
                     )}
                 </div>
             )}
-            
+
             {!allDone && (
                 <p style={{ fontSize: '14px', color: '#888', marginTop: '20px' }}>
                     {currentIndex + 1} of {sortedAnswers.length} {stage === 'answer' ? '(answer)' : '(revealed)'}
                 </p>
             )}
-            
+
             {isHost && allDone && (
                 <div style={{ marginTop: '30px', textAlign: 'center' }}>
-                    <button 
+                    <button
                         onClick={handleContinue}
-                        style={{ 
-                            padding: '15px 30px', 
+                        style={{
+                            padding: '15px 30px',
                             fontSize: '18px',
                             backgroundColor: '#2196F3',
                             color: 'white',
