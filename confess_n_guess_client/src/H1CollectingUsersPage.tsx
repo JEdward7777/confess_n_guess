@@ -50,8 +50,8 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '40px', flexWrap: 'wrap' }}>
                 {joinUrl && (
                     <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '10px' }}>
-                        <QRCodeSVG value={joinUrl} size={200} />
-                        <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>Scan to join</p>
+                        <QRCodeSVG value={joinUrl} size={200} includeMargin={true} />
+                        <p style={{ marginTop: '10px', fontSize: '14px', color: '#666', backgroundColor: 'white' }}>Scan to join</p>
                     </div>
                 )}
                 
