@@ -672,7 +672,8 @@ export class SocketHandlers {
                     this.sendToHost(code, {
                         screen: Screens.h2InformationScreenWithTimer,
                         text: 'Voting on lies for ' + targetPlayer + '!',
-                        timerValue: 60
+                        timerValue: 60,
+                        answers: shuffledAnswers
                     });
                     
                     // Send voting to all players except target
@@ -1142,7 +1143,8 @@ export class SocketHandlers {
                     this.sendToHost(code, {
                         screen: Screens.h2InformationScreenWithTimer,
                         text: 'Voting on lies for ' + targetPlayer + '!',
-                        timerValue: 60
+                        timerValue: 60,
+                        answers: shuffledAnswers
                     });
                     
                     userNames.forEach(username => {
@@ -1283,7 +1285,8 @@ export class SocketHandlers {
                         this.sendToHost(code, {
                             screen: Screens.h2InformationScreenWithTimer,
                             text: 'Voting on lies for ' + targetPlayer + '!',
-                            timerValue: 60
+                            timerValue: 60,
+                            answers: shuffledAnswers
                         });
                         
                         userNames.forEach(username => {
@@ -1342,7 +1345,7 @@ export class SocketHandlers {
                         answer: a.answer,
                         isTruth: a.isTruth,
                         voters: voteCounts[a.username] || []
-                    }));
+                    })).sort(() => Math.random() - 0.5); // Shuffle for reveal order
                     
                     this.sendToHost(code, {
                         screen: Screens.h3ShowTheLiesAndTruths,

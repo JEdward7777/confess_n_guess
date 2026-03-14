@@ -577,7 +577,8 @@ class SocketHandlers {
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                         text: 'Voting on lies for ' + targetPlayer + '!',
-                        timerValue: 60
+                        timerValue: 60,
+                        answers: shuffledAnswers
                     });
                     // Send voting to all players except target
                     userNames.forEach(username => {
@@ -981,7 +982,8 @@ class SocketHandlers {
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                         text: 'Voting on lies for ' + targetPlayer + '!',
-                        timerValue: 60
+                        timerValue: 60,
+                        answers: shuffledAnswers
                     });
                     userNames.forEach(username => {
                         if (username !== targetPlayer) {
@@ -1109,7 +1111,8 @@ class SocketHandlers {
                         this.sendToHost(code, {
                             screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                             text: 'Voting on lies for ' + targetPlayer + '!',
-                            timerValue: 60
+                            timerValue: 60,
+                            answers: shuffledAnswers
                         });
                         userNames.forEach(username => {
                             if (username !== targetPlayer) {
@@ -1162,7 +1165,7 @@ class SocketHandlers {
                         answer: a.answer,
                         isTruth: a.isTruth,
                         voters: voteCounts[a.username] || []
-                    }));
+                    })).sort(() => Math.random() - 0.5); // Shuffle for reveal order
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
                         text: 'Results for ' + targetPlayer + '!',

@@ -41,14 +41,6 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
         }
     };
 
-    const handleNextRound = () => {
-        socket.emit('nextRound', { code: gameState?.sharedState?.code ?? "" });
-    }
-
-    const handleEndGame = () => {
-        socket.emit('endGame', { code: gameState?.sharedState?.code ?? "" });
-    }
-
     const leaderboard = gameState.leaderboard ?? [];
     const text = gameState.text ?? "Points for this round";
 
@@ -110,40 +102,6 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
                             Auto-continue in {countdown} seconds
                         </p>
                     )}
-                </div>
-            )}
-
-            {isHost && (
-                <div style={{ marginTop: '30px' }}>
-                    <button 
-                        onClick={handleNextRound}
-                        style={{ 
-                            padding: '15px 30px', 
-                            fontSize: '18px',
-                            backgroundColor: '#4CAF50',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            cursor: 'pointer',
-                            marginRight: '10px'
-                        }}
-                    >
-                        Next Round
-                    </button>
-                    <button 
-                        onClick={handleEndGame}
-                        style={{ 
-                            padding: '15px 30px', 
-                            fontSize: '18px',
-                            backgroundColor: '#f44336',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        End Game
-                    </button>
                 </div>
             )}
         </div>
