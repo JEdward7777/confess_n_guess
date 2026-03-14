@@ -14,6 +14,14 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
     const answers = gameState.answers ?? [];
     const text = gameState.text ?? "Results";
+    const isHost = gameState.name === '<host>';
+
+    const handleContinue = () => {
+        const code = gameState.sharedState?.code;
+        if (code) {
+            socket.emit('continueFromResults', { code });
+        }
+    };
 
     // Check if we have voter info (lie results phase)
     const hasVoters = answers.length > 0 && (answers[0] as any).voters !== undefined;
@@ -109,12 +117,12 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                             
                             {/* Show voters if available */}
                             {hasVoters && isRevealed && voters.length > 0 && (
-                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#333' }}>
                                     Voted by: {voters.join(', ')}
                                 </div>
                             )}
                             {hasVoters && isRevealed && voters.length === 0 && answer.isTruth && (
-                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#e74c3c' }}>
+                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#c0392b' }}>
                                     No one guessed the truth!
                                 </div>
                             )}
@@ -126,6 +134,24 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                 <p style={{ fontSize: '14px', color: '#888', marginTop: '20px' }}>
                     {revealedCount} of {answers.length} revealed...
                 </p>
+            )}
+            
+            {isHost && allRevealed && (
+                <button 
+                    onClick={handleContinue}
+                    style={{ 
+                        marginTop: '30px',
+                        padding: '15px 30px', 
+                        fontSize: '18px',
+                        backgroundColor: '#2196F3',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Continue
+                </button>
             )}
         </div>
     );

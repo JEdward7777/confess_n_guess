@@ -12,6 +12,15 @@ interface H5ShowPointsProps {
 
 const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
 
+    const isHost = gameState.name === '<host>';
+
+    const handleContinue = () => {
+        const code = gameState.sharedState?.code;
+        if (code) {
+            socket.emit('continueFromScores', { code });
+        }
+    };
+
     const handleNextRound = () => {
         socket.emit('nextRound', { code: gameState?.sharedState?.code ?? "" });
     }
@@ -24,33 +33,34 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
     const text = gameState.text ?? "Points for this round";
 
     return (
-        <div>
-            <h1>Points This Round</h1>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+        <div style={{ backgroundColor: '#1a1a1a', minHeight: '100vh', color: '#fff', padding: '20px' }}>
+            <h1 style={{ color: '#fff' }}>Points This Round</h1>
+            <div style={{ whiteSpace: 'pre-wrap', color: '#ccc' }}>{text}</div>
             
             <div style={{ marginTop: '30px' }}>
-                <h2>Leaderboard</h2>
+                <h2 style={{ color: '#fff' }}>Leaderboard</h2>
                 <table style={{ width: '100%', maxWidth: '400px', borderCollapse: 'collapse' }}>
                     <thead>
-                        <tr style={{ backgroundColor: '#f2f2f2' }}>
-                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Rank</th>
-                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Player</th>
-                            <th style={{ padding: '10px', border: '1px solid #ddd' }}>Points</th>
+                        <tr style={{ backgroundColor: '#333' }}>
+                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Rank</th>
+                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Player</th>
+                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Points</th>
                         </tr>
                     </thead>
                     <tbody>
                         {leaderboard.map((entry: LeaderboardEntry, index: number) => (
                             <tr key={entry.name} style={{ 
-                                backgroundColor: index === 0 ? '#fff3cd' : 'white',
+                                backgroundColor: index === 0 ? '#2d2d2d' : '#1a1a1a',
+                                color: '#fff',
                                 fontWeight: index === 0 ? 'bold' : 'normal'
                             }}>
-                                <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                <td style={{ padding: '10px', border: '1px solid #555', textAlign: 'center', color: '#fff' }}>
                                     {index + 1}
                                 </td>
-                                <td style={{ padding: '10px', border: '1px solid #ddd' }}>
+                                <td style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>
                                     {entry.emoji} {entry.name}
                                 </td>
-                                <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                <td style={{ padding: '10px', border: '1px solid #555', textAlign: 'center', color: '#fff' }}>
                                     {entry.points}
                                 </td>
                             </tr>
@@ -58,6 +68,25 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
                     </tbody>
                 </table>
             </div>
+
+            {isHost && (
+                <div style={{ marginTop: '30px' }}>
+                    <button 
+                        onClick={handleContinue}
+                        style={{ 
+                            padding: '15px 30px', 
+                            fontSize: '18px',
+                            backgroundColor: '#2196F3',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Continue
+                    </button>
+                </div>
+            )}
 
             <div style={{ marginTop: '30px' }}>
                 <button 

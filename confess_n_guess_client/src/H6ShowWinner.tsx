@@ -13,7 +13,9 @@ interface H6ShowWinnerProps {
 const H6ShowWinner = ({ gameState }: H6ShowWinnerProps) => {
 
     const handleNewGame = () => {
-        socket.emit('newGame');
+        // Go back to host screen instead of creating a new game
+        // This prevents all players from becoming hosts
+        window.location.reload();
     }
 
     const leaderboard = gameState.leaderboard ?? [];
