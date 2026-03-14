@@ -193,6 +193,146 @@ export class SocketHandlers {
                 sendState({ ...baseState, screen: Screens.h1CollectingUsers });
         }
     }
+    
+    /**
+     * Sends a player to the correct screen based on game state and their name.
+     * This is the single source of truth for where a player should be.
+     * Used for reconnects and when players send events at wrong times.
+     */
+    private sendPlayerToCorrectScreen(code: string, gameState: GameState, playerName: string, socket: Socket): void {
+        const phase = gameState.getPhase();
+        const targetPlayer = gameState.getCurrentLieTargetPlayer();
+        
+        const baseState = {
+            sharedState: gameState.getSharedState(),
+            name: playerName
+        };
+        
+        // Get user emoji if available
+        if (gameState.getSharedState().users[playerName]) {
+            (baseState as any).emoji = gameState.getSharedState().users[playerName].emoji;
+        }
+        
+        let screenToSend: Screens = Screens.c2WaitingScreenJustWhateverText;
+        let textToSend = 'Please wait...';
+        let questionText = '';
+        let answers: any[] = [];
+        
+        switch (phase) {
+            case GamePhase.CollectingUsers:
+                screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                textToSend = 'Please wait for the host to start the game...';
+                break;
+                
+            case GamePhase.AnsweringQuestions:
+                // Check if user already answered
+                const userAnswers = gameState['userAnswers'] as any;
+                if (userAnswers && userAnswers[playerName]) {
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'Your answer has been submitted! Please wait for others...';
+                } else {
+                    // Send question to answer
+                    const questionObj = gameState.getNextQuestion();
+                    screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
+                    questionText = questionObj?.question || '';
+                    textToSend = questionObj ? `Please answer this question:\n\n${questionObj.question}` : 'No question available';
+                }
+                break;
+                
+            case GamePhase.SubmittingLies:
+                if (targetPlayer === playerName) {
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'Your truth has been submitted! Now others will submit lies for your question.';
+                } else {
+                    const truth = gameState.getTruthForPlayer(targetPlayer || '');
+                    const userLies = gameState['lies'] as any;
+                    if (userLies && userLies[targetPlayer]?.some((l: any) => l.username === playerName)) {
+                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                        textToSend = 'Your lie has been submitted! Please wait for others...';
+                    } else {
+                        screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
+                        questionText = truth?.question || '';
+                        textToSend = truth ? `Write a LIE for this question about ${targetPlayer}:\n\n${truth.question}` : 'No question available';
+                    }
+                }
+                break;
+                
+            case GamePhase.VotingOnLies:
+                const userVotes = gameState['votes'] as any;
+                if (userVotes && userVotes[targetPlayer]?.some((v: any) => v.voter === playerName)) {
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'Your vote has been submitted! Please wait for others...';
+                } else {
+                    const truth = gameState.getTruthForPlayer(targetPlayer || '');
+                    const lies = gameState.getLiesForPlayer(targetPlayer || '');
+                    const allAnswers = [
+                        { username: targetPlayer, answer: truth?.answer || '', isTruth: true },
+                        ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
+                    ];
+                    answers = allAnswers.sort(() => Math.random() - 0.5);
+                    screenToSend = Screens.c4PickTheBestAnswerOutOfAList;
+                    textToSend = 'Vote for the TRUTH!';
+                }
+                break;
+                
+            case GamePhase.ShowingLieResults:
+                // Send to results screen too so they can see what happened
+                const truth2 = targetPlayer ? gameState.getTruthForPlayer(targetPlayer) : null;
+                const lies2 = targetPlayer ? gameState.getLiesForPlayer(targetPlayer) : [];
+                const votes2 = targetPlayer ? gameState.getVotesForPlayer(targetPlayer) : [];
+                const leaderboard = gameState.getLeaderboard();
+                
+                if (targetPlayer && truth2) {
+                    const allAnswers2 = [
+                        { username: targetPlayer, answer: truth2.answer, isTruth: true },
+                        ...lies2.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
+                    ];
+                    
+                    const voteCounts: { [username: string]: string[] } = {};
+                    votes2.forEach(v => {
+                        if (!voteCounts[v.selectedUsername]) {
+                            voteCounts[v.selectedUsername] = [];
+                        }
+                        voteCounts[v.selectedUsername].push(v.voter);
+                    });
+                    
+                    answers = allAnswers2.map(a => ({
+                        username: a.username,
+                        answer: a.answer,
+                        isTruth: a.isTruth,
+                        voters: voteCounts[a.username] || []
+                    }));
+                }
+                
+                screenToSend = Screens.h3ShowTheLiesAndTruths;
+                textToSend = targetPlayer ? `Results for ${targetPlayer}!` : 'Results';
+                break;
+                
+            case GamePhase.ShowingPoints:
+                screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                textToSend = 'Please wait while results are being shown...';
+                break;
+                
+            case GamePhase.GameOver:
+                screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                textToSend = 'The game has ended!';
+                break;
+                
+            default:
+                screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                textToSend = 'Please wait...';
+        }
+        
+        // Send the corrected state to the player
+        socket.emit('gameState', {
+            ...baseState,
+            screen: screenToSend,
+            text: textToSend,
+            question: questionText,
+            answers: answers,
+            leaderboard: phase === GamePhase.GameOver || phase === GamePhase.ShowingPoints ? gameState.getLeaderboard() : undefined
+        });
+    }
 
     handleConnection(socket: Socket): void {
         console.log('a user connected', socket.id);
@@ -316,68 +456,8 @@ export class SocketHandlers {
                     screen: this.getHostScreen(gameState)
                 });
                 
-                // Determine what screen to send based on game phase
-                const phase = gameState.getPhase();
-                let screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                let textToSend = 'Please wait...';
-                
-                if (phase === GamePhase.CollectingUsers) {
-                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                    textToSend = 'Please wait for the host to start the game...';
-                } else if (phase === GamePhase.AnsweringQuestions) {
-                    // Check if user already answered
-                    const userAnswers = gameState['userAnswers'] as any;
-                    if (userAnswers && userAnswers[name]) {
-                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                        textToSend = 'Your answer has been submitted! Please wait for others...';
-                    } else {
-                        // Send question to answer
-                        const questionObj = gameState.getNextQuestion();
-                        screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
-                        textToSend = questionObj ? `Please answer this question:\n\n${questionObj.question}` : 'No question available';
-                    }
-                } else if (phase === GamePhase.SubmittingLies) {
-                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                    if (targetPlayer === name) {
-                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                        textToSend = 'Your truth has been submitted! Now others will submit lies for your question.';
-                    } else {
-                        const truth = gameState.getTruthForPlayer(targetPlayer || '');
-                        const userLies = gameState['lies'] as any;
-                        if (userLies && userLies[targetPlayer]?.some((l: any) => l.username === name)) {
-                            screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                            textToSend = 'Your lie has been submitted! Please wait for others...';
-                        } else {
-                            screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
-                            textToSend = truth ? `Write a LIE for this question about ${targetPlayer}:\n\n${truth.question}` : 'No question available';
-                        }
-                    }
-                } else if (phase === GamePhase.VotingOnLies) {
-                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                    const userVotes = gameState['votes'] as any;
-                    if (userVotes && userVotes[targetPlayer]?.some((v: any) => v.voter === name)) {
-                        screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                        textToSend = 'Your vote has been submitted! Please wait for others...';
-                    } else {
-                        screenToSend = Screens.c4PickTheBestAnswerOutOfAList;
-                        textToSend = 'Vote for the TRUTH!';
-                    }
-                } else if (phase === GamePhase.ShowingLieResults || phase === GamePhase.ShowingPoints) {
-                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                    textToSend = 'Please wait while results are being shown...';
-                } else if (phase === GamePhase.GameOver) {
-                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
-                    textToSend = 'The game has ended!';
-                }
-                
-                // Send appropriate screen to user
-                socket.emit('gameState', {
-                    sharedState: gameState.getSharedState(),
-                    name: name,
-                    emoji: emoji,
-                    screen: screenToSend,
-                    text: textToSend
-                });
+                // Use the single source of truth function to send player to correct screen
+                this.sendPlayerToCorrectScreen(code, gameState, name, socket);
             } else {
                 socket.emit('gameState', {
                     screen: Screens.g1NewGame,
@@ -465,6 +545,13 @@ export class SocketHandlers {
             const gameState = this.games[code];
             
             if (gameState) {
+                // Check if this event makes sense for the current game state
+                if (gameState.getPhase() !== GamePhase.AnsweringQuestions) {
+                    console.log('ERROR: Received answer but not in AnsweringQuestions phase. Resyncing player.');
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+                
                 console.log('User ' + name + ' answered: ' + answer);
                 
                 // Store the answer
@@ -541,7 +628,14 @@ export class SocketHandlers {
         }) => {
             const gameState = this.games[code];
             
-            if (gameState && gameState.getPhase() === GamePhase.SubmittingLies) {
+            if (gameState) {
+                // Check if this event makes sense for the current game state
+                if (gameState.getPhase() !== GamePhase.SubmittingLies) {
+                    console.log('ERROR: Received lie but not in SubmittingLies phase. Resyncing player.');
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+                
                 console.log('User ' + name + ' submitted lie for ' + targetPlayer + ': ' + lie);
                 
                 // Store the lie
@@ -618,7 +712,14 @@ export class SocketHandlers {
         }) => {
             const gameState = this.games[code];
             
-            if (gameState && gameState.getPhase() === GamePhase.VotingOnLies) {
+            if (gameState) {
+                // Check if this event makes sense for the current game state
+                if (gameState.getPhase() !== GamePhase.VotingOnLies) {
+                    console.log('ERROR: Received vote but not in VotingOnLies phase. Resyncing player.');
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+                
                 console.log('User ' + name + ' voted for ' + selectedUsername + ' (target: ' + targetPlayer + ')');
                 
                 // Store the vote
@@ -693,6 +794,14 @@ export class SocketHandlers {
             const gameState = this.games[code];
             
             if (gameState) {
+                // This is a legacy handler - we now use voteOnLie instead
+                // But keep for backward compatibility - check phase
+                if (gameState.getPhase() !== GamePhase.VotingOnLies && gameState.getPhase() !== GamePhase.ShowingPoints) {
+                    console.log('ERROR: Received selectBestAnswer at wrong phase. Resyncing host.');
+                    this.sendHostToCorrectScreen(code, gameState);
+                    return;
+                }
+                
                 console.log('Best answer selected: ' + selectedUsername);
                 
                 // Award points to the selected player
