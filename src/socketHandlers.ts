@@ -972,8 +972,11 @@ export class SocketHandlers {
                     
                     userNames.forEach(username => {
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const playerSocket = socketInfo.playerSockets[username];
-                            this.sendPlayerToCorrectScreen(code, gameState, username, this.io.sockets.sockets.get(playerSocket)!);
+                            const playerSocketId = socketInfo.playerSockets[username];
+                            const socket = this.io.sockets.sockets.get(playerSocketId);
+                            if (socket) {
+                                this.sendPlayerToCorrectScreen(code, gameState, username, socket);
+                            }
                         }
                     });
                 } else {
