@@ -115,7 +115,6 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                             transition: 'all 0.3s ease'
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>{answer.username}</span>
                                 {isRevealed && answer.isTruth && (
                                     <span style={{ 
                                         color: '#1a1a1a', 
