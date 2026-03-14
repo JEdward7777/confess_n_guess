@@ -367,21 +367,28 @@ export class GameState {
     getNextLieTargetPlayerSkippingMissing(): string | null {
         const userNames = this.getUserNames();
         
-        // Start from the current player
-        let currentIndex = this.currentLieTargetPlayer 
-            ? userNames.indexOf(this.currentLieTargetPlayer) 
-            : -1;
+        // If no current target, start from the beginning
+        if (!this.currentLieTargetPlayer) {
+            for (const player of userNames) {
+                if (this.userAnswers[player]) {
+                    return player;
+                }
+            }
+            return null;
+        }
         
-        // Try to find the next player with a truth
-        for (let i = 1; i < userNames.length; i++) {
-            const nextIndex = (currentIndex + i) % userNames.length;
-            const player = userNames[nextIndex];
+        const currentIndex = userNames.indexOf(this.currentLieTargetPlayer);
+        
+        // First, try to find players AFTER the current one
+        for (let i = currentIndex + 1; i < userNames.length; i++) {
+            const player = userNames[i];
             if (this.userAnswers[player]) {
                 return player;
             }
         }
         
-        return null; // No players with truths found
+        // If no more after current, we're done (don't wrap around)
+        return null;
     }
     
     // Advance to next lie target player
@@ -399,7 +406,21 @@ export class GameState {
 
     // Check if there are more targets with truths (for continuing after showing points)
     hasMoreLieTargets(): boolean {
-        return this.getNextLieTargetPlayerSkippingMissing() !== null;
+        // Check if there are more players with truths AFTER the current one
+        const userNames = this.getUserNames();
+        if (!this.currentLieTargetPlayer) {
+            return userNames.some(name => this.userAnswers[name]);
+        }
+        
+        const currentIndex = userNames.indexOf(this.currentLieTargetPlayer);
+        
+        for (let i = currentIndex + 1; i < userNames.length; i++) {
+            if (this.userAnswers[userNames[i]]) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     // Reset lies and votes for new game
