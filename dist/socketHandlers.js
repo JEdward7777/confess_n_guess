@@ -191,6 +191,7 @@ class SocketHandlers {
         let screenToSend = IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText;
         let textToSend = 'Please wait...';
         let questionText = '';
+        let instructionText = '';
         let answers = [];
         switch (phase) {
             case GameState_1.GamePhase.CollectingUsers:
@@ -209,6 +210,7 @@ class SocketHandlers {
                     const questionObj = gameState.getNextQuestion();
                     screenToSend = IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
                     questionText = (questionObj === null || questionObj === void 0 ? void 0 : questionObj.question) || '';
+                    instructionText = 'Please answer this question truthfully about yourself';
                     textToSend = questionObj ? `Please answer this question:\n\n${questionObj.question}` : 'No question available';
                 }
                 break;
@@ -227,6 +229,7 @@ class SocketHandlers {
                     else {
                         screenToSend = IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
                         questionText = (truth === null || truth === void 0 ? void 0 : truth.question) || '';
+                        instructionText = `Write a fooling answer for this question about ${targetPlayer}`;
                         textToSend = truth ? `Write a LIE for this question about ${targetPlayer}:\n\n${truth.question}` : 'No question available';
                     }
                 }
@@ -295,6 +298,7 @@ class SocketHandlers {
             screen: screenToSend,
             text: textToSend,
             question: questionText,
+            instructionText: instructionText,
             answers: answers,
             leaderboard: phase === GameState_1.GamePhase.GameOver || phase === GameState_1.GamePhase.ShowingPoints ? gameState.getLeaderboard() : undefined
         });
@@ -463,7 +467,8 @@ class SocketHandlers {
                                 screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                                 text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                                 question: questionObj.question,
-                                questionIndex: questionObj.index
+                                questionIndex: questionObj.index,
+                                instructionText: 'Please answer this question truthfully about yourself'
                             });
                         }
                     }
@@ -513,7 +518,8 @@ class SocketHandlers {
                                         screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                                         text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
                                         question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
-                                        targetPlayer: firstTarget
+                                        targetPlayer: firstTarget,
+                                        instructionText: `Write a fooling answer for this question about ${firstTarget}`
                                     });
                                 }
                             }
@@ -727,7 +733,8 @@ class SocketHandlers {
                             screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                             text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                             question: questionObj.question,
-                            questionIndex: questionObj.index
+                            questionIndex: questionObj.index,
+                            instructionText: 'Please answer this question truthfully about yourself'
                         });
                     }
                 });
@@ -775,7 +782,9 @@ class SocketHandlers {
                         const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
                         this.io.to(playerSocketId).emit('gameState', {
                             screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
-                            text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available'
+                            text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
+                            question: nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question,
+                            instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
                         });
                     }
                     // Send waiting to others
@@ -863,7 +872,8 @@ class SocketHandlers {
                                         screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                                         text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
                                         question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
-                                        targetPlayer: firstTarget
+                                        targetPlayer: firstTarget,
+                                        instructionText: `Write a fooling answer for this question about ${firstTarget}`
                                     });
                                 }
                             }
@@ -935,7 +945,8 @@ class SocketHandlers {
                                         screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                                         text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
                                         question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
-                                        targetPlayer: firstTarget
+                                        targetPlayer: firstTarget,
+                                        instructionText: `Write a fooling answer for this question about ${firstTarget}`
                                     });
                                 }
                             }
@@ -1030,7 +1041,8 @@ class SocketHandlers {
                                                 screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                                                 text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                                                 question: questionObj.question,
-                                                questionIndex: questionObj.index
+                                                questionIndex: questionObj.index,
+                                                instructionText: 'Please answer this question truthfully about yourself'
                                             });
                                         }
                                     }
@@ -1056,7 +1068,9 @@ class SocketHandlers {
                                     const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
                                     this.io.to(playerSocketId).emit('gameState', {
                                         screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
-                                        text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available'
+                                        text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
+                                        question: nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question,
+                                        instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
                                     });
                                 }
                                 // Send waiting to others
@@ -1244,7 +1258,8 @@ class SocketHandlers {
                                                     screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
                                                     text: 'Write a LIE for ' + nextTarget + '!',
                                                     question: (nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || '',
-                                                    targetPlayer: nextTarget
+                                                    targetPlayer: nextTarget,
+                                                    instructionText: `Write a fooling answer for this question about ${nextTarget}`
                                                 });
                                             }
                                         }

@@ -49,6 +49,7 @@ export interface ClientGameState {
     question?: string,
     questionIndex?: number,
     text?: string,
+    instructionText?: string,
     timerValue?: number,
     answers?: UserAnswer[],
     leaderboard?: LeaderboardEntry[],

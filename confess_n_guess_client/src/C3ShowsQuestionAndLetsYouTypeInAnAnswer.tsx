@@ -37,7 +37,8 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
             }
         }
         
-        // Check if this is a lie submission
+        // Check if this is a lie submission by checking for instructionText containing "fooling"
+        // This is a fallback - primarily we rely on instructionText from server
         if (gameState.targetPlayer) {
             setIsLieSubmission(true);
             setTargetPlayer(gameState.targetPlayer);
@@ -45,7 +46,7 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
             setIsLieSubmission(false);
             setTargetPlayer("");
         }
-    }, [gameState.question, gameState.text, gameState.targetPlayer, gameState.screen]);
+    }, [gameState.question, gameState.text, gameState.targetPlayer, gameState.screen, gameState.instructionText]);
 
     const submitAnswer = () => {
         if (!answer.trim()) {
@@ -84,7 +85,7 @@ const C3ShowsQuestionAndLetsYouTypeInAnAnswer = ({gameState}: C3ShowsQuestionAnd
     
     return (
         <div>
-            <h1>{isLieSubmission ? `Write a LIE about ${targetPlayer}` : 'Answer the question'}</h1>
+            <h1>{gameState.instructionText || (isLieSubmission ? `Write a LIE about ${targetPlayer}` : 'Answer the question')}</h1>
             <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px' }}>
                 {storedQuestion}
             </div>
