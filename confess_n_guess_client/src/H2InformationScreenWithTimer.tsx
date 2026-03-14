@@ -18,11 +18,12 @@ const H2InformationScreenWithTimer = ({gameState}: H2InformationScreenWithTimerP
     const hasSentTimeoutEvent = useRef(false);
 
     // Use the timerValue from server if available
+    // Reset timer when text changes (e.g., transitioning from truths to lies)
     useEffect(() => {
-        if (gameState.timerValue !== undefined && gameState.timerValue !== count) {
-            setCounter(gameState.timerValue);
-        }
-    }, [gameState.timerValue]);
+        const newTimerValue = gameState.timerValue ?? DEFAULT_COUNTDOWN;
+        setCounter(newTimerValue);
+        hasSentTimeoutEvent.current = false; // Reset the timeout event flag
+    }, [gameState.timerValue, gameState.text]);
 
     //decrement the counter until it reaches 0
     useEffect(() => {
