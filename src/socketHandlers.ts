@@ -353,8 +353,8 @@ export class SocketHandlers {
             leaderboard: phase === GamePhase.GameOver || phase === GamePhase.ShowingPoints ? gameState.getLeaderboard() : undefined
         };
         
-        // Add targetPlayer for lie-related phases
-        if (targetPlayer && (phase === GamePhase.SubmittingLies || phase === GamePhase.VotingOnLies)) {
+        // Always add targetPlayer if we have one
+        if (targetPlayer) {
             emitState.targetPlayer = targetPlayer;
         }
         
