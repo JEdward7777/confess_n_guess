@@ -19,19 +19,20 @@ import H5ShowPoints from './H5ShowPoints';
 import H6ShowWinner from './H6ShowWinner';
 
 function App() {
-  // Check if we should show the new game screen
+  // Check if we should show the new game screen or join with code
   const urlParams = new URLSearchParams(window.location.search);
   const showNewGame = urlParams.get('new') === '1';
+  const joinCode = urlParams.get('code');
   
   //have a state representing what screen we are on.
   const [gameState, _setGameState] = useState<ClientGameState>({
     sharedState: {
       users: {},
-      code: "",
+      code: joinCode || "",
     },
     name: "",
     emoji: "",
-    screen : showNewGame ? Screens.g1NewGame : Screens.g1NewGame,
+    screen : showNewGame ? Screens.g1NewGame : (joinCode ? Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture : Screens.g1NewGame),
     error: "",
   });
   const gameStateRef = useRef<ClientGameState>( gameState );

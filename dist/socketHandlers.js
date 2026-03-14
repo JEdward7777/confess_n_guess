@@ -195,7 +195,6 @@ class SocketHandlers {
         const phase = gameState.getPhase();
         // Use custom target if provided, otherwise use game state
         const targetPlayer = customTarget || gameState.getCurrentLieTargetPlayer();
-        console.log('sendPlayerToCorrectScreen: phase=' + phase + ', targetPlayer=' + targetPlayer + ', player=' + playerName);
         const baseState = {
             sharedState: gameState.getSharedState(),
             name: playerName
@@ -318,9 +317,8 @@ class SocketHandlers {
             answers: answers,
             leaderboard: phase === GameState_1.GamePhase.GameOver || phase === GameState_1.GamePhase.ShowingPoints ? gameState.getLeaderboard() : undefined
         };
-        // Always add targetPlayer if we have one and phase is lie-related
+        // Always add targetPlayer if we have one
         if (targetPlayer) {
-            console.log('sendPlayerToCorrectScreen emitting: targetPlayer=' + targetPlayer + ', phase=' + phase);
             emitState.targetPlayer = targetPlayer;
         }
         socket.emit('gameState', emitState);
