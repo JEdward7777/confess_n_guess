@@ -2,6 +2,16 @@ import { Server, Socket } from 'socket.io';
 import { GameState, GamePhase } from './GameState';
 import { Screens, ClientGameState } from './IncludeStuff';
 
+// Fisher-Yates shuffle - proper unbiased shuffle
+function shuffleArray<T>(array: T[]): T[] {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
+
 interface GamesStore {
     [gameCode: string]: GameState;
 }
@@ -272,7 +282,7 @@ export class SocketHandlers {
                         { username: targetPlayer, answer: truth?.answer || '', isTruth: true },
                         ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                     ];
-                    answers = allAnswers.sort(() => Math.random() - 0.5);
+                    answers = shuffleArray(allAnswers);
                     screenToSend = Screens.c4PickTheBestAnswerOutOfAList;
                     textToSend = 'Vote for the TRUTH!';
                 }
@@ -666,7 +676,7 @@ export class SocketHandlers {
                     ];
                     
                     // Shuffle for voting
-                    const shuffledAnswers = [...allAnswers].sort(() => Math.random() - 0.5);
+                    const shuffledAnswers = shuffleArray(allAnswers);
                     
                     // Send timer to host
                     this.sendToHost(code, {
@@ -1138,7 +1148,7 @@ export class SocketHandlers {
                         ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                     ];
                     
-                    const shuffledAnswers = [...allAnswers].sort(() => Math.random() - 0.5);
+                    const shuffledAnswers = shuffleArray(allAnswers);
                     
                     this.sendToHost(code, {
                         screen: Screens.h2InformationScreenWithTimer,
@@ -1280,7 +1290,7 @@ export class SocketHandlers {
                             ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                         ];
                         
-                        const shuffledAnswers = [...allAnswers].sort(() => Math.random() - 0.5);
+                        const shuffledAnswers = shuffleArray(allAnswers);
                         
                         this.sendToHost(code, {
                             screen: Screens.h2InformationScreenWithTimer,
@@ -1340,12 +1350,12 @@ export class SocketHandlers {
                         voteCounts[v.selectedUsername].push(v.voter);
                     });
                     
-                    const results = allAnswers.map(a => ({
+                    const results = shuffleArray(allAnswers.map(a => ({
                         username: a.username,
                         answer: a.answer,
                         isTruth: a.isTruth,
                         voters: voteCounts[a.username] || []
-                    })).sort(() => Math.random() - 0.5); // Shuffle for reveal order
+                    })));
                     
                     this.sendToHost(code, {
                         screen: Screens.h3ShowTheLiesAndTruths,

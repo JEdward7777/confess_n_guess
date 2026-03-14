@@ -3,6 +3,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocketHandlers = void 0;
 const GameState_1 = require("./GameState");
 const IncludeStuff_1 = require("./IncludeStuff");
+// Fisher-Yates shuffle - proper unbiased shuffle
+function shuffleArray(array) {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
 class SocketHandlers {
     constructor(io, games) {
         this.io = io;
@@ -247,7 +256,7 @@ class SocketHandlers {
                         { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
                         ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                     ];
-                    answers = allAnswers.sort(() => Math.random() - 0.5);
+                    answers = shuffleArray(allAnswers);
                     screenToSend = IncludeStuff_1.Screens.c4PickTheBestAnswerOutOfAList;
                     textToSend = 'Vote for the TRUTH!';
                 }
@@ -572,7 +581,7 @@ class SocketHandlers {
                         ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                     ];
                     // Shuffle for voting
-                    const shuffledAnswers = [...allAnswers].sort(() => Math.random() - 0.5);
+                    const shuffledAnswers = shuffleArray(allAnswers);
                     // Send timer to host
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
@@ -978,7 +987,7 @@ class SocketHandlers {
                         { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
                         ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                     ];
-                    const shuffledAnswers = [...allAnswers].sort(() => Math.random() - 0.5);
+                    const shuffledAnswers = shuffleArray(allAnswers);
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                         text: 'Voting on lies for ' + targetPlayer + '!',
@@ -1107,7 +1116,7 @@ class SocketHandlers {
                             { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
                             ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
                         ];
-                        const shuffledAnswers = [...allAnswers].sort(() => Math.random() - 0.5);
+                        const shuffledAnswers = shuffleArray(allAnswers);
                         this.sendToHost(code, {
                             screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
                             text: 'Voting on lies for ' + targetPlayer + '!',
@@ -1160,12 +1169,12 @@ class SocketHandlers {
                         }
                         voteCounts[v.selectedUsername].push(v.voter);
                     });
-                    const results = allAnswers.map(a => ({
+                    const results = shuffleArray(allAnswers.map(a => ({
                         username: a.username,
                         answer: a.answer,
                         isTruth: a.isTruth,
                         voters: voteCounts[a.username] || []
-                    })).sort(() => Math.random() - 0.5); // Shuffle for reveal order
+                    })));
                     this.sendToHost(code, {
                         screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
                         text: 'Results for ' + targetPlayer + '!',

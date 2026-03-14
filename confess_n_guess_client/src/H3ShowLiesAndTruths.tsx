@@ -84,20 +84,18 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         }
     }, [allRevealed, isHost, countdown]);
     
-    // Dark theme styles - use 100vw to override .App constraint
-    const containerStyle = {
-        backgroundColor: '#1a1a1a',
-        minHeight: '100vh',
-        color: '#fff',
-        padding: '20px',
-        width: '100vw',
-        maxWidth: 'none',
-        marginLeft: 'calc(50% - 50vw)',
-        marginRight: 'calc(50% - 50vw)'
-    };
-
+    // Dark theme styles - use inline styles to bypass App constraints
     return (
-        <div style={containerStyle}>
+        <div style={{ 
+            backgroundColor: '#1a1a1a', 
+            minHeight: '100vh', 
+            color: '#fff', 
+            padding: '20px',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0
+        }}>
             <h1 style={{ color: '#fff' }}>{allRevealed ? "Results Revealed!" : "Drumroll..."}</h1>
             <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px', color: '#ccc' }}>{text}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
