@@ -51,14 +51,14 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
     useEffect(() => {
         if (sortedAnswers.length === 0 || allDone) return;
 
-        // Stage 1: Show answer + voters (1 second)
+        // Stage 1: Show answer + voters (2 seconds)
         if (stage === 'answer') {
             const timer = setTimeout(() => {
                 setStage('reveal');
-            }, 1000);
+            }, 2000);
             return () => clearTimeout(timer);
         }
-        // Stage 2: Show Truth/Lie reveal (1 second), then move to next
+        // Stage 2: Show Truth/Lie reveal (2 seconds), then move to next
         else if (stage === 'reveal') {
             const timer = setTimeout(() => {
                 if (currentIndex < sortedAnswers.length - 1) {
@@ -69,7 +69,7 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                     // All done
                     setAllDone(true);
                 }
-            }, 1000);
+            }, 2000);
             return () => clearTimeout(timer);
         }
     }, [stage, currentIndex, sortedAnswers.length, allDone]);
