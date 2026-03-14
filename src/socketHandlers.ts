@@ -911,27 +911,28 @@ export class SocketHandlers {
                     const userNames = gameState.getUserNames();
                     const socketInfo = this.socketStuff[code];
                     
-                    // Send lie submission to next target
-                    if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
-                        const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
-                        this.io.to(playerSocketId).emit('gameState', {
-                            screen: Screens.c5SubmitLie,
-                            text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
-                            question: nextTruth?.question,
-                            instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
-                        });
-                    }
-                    
-                    // Send waiting to others
+                    // Send lie submission to all EXCEPT the target (they wait)
                     userNames.forEach(username => {
                         if (username !== nextTargetPlayer && socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                             const playerSocketId = socketInfo.playerSockets[username];
                             this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c2WaitingScreenJustWhateverText,
-                                text: nextTargetPlayer + ' is writing a lie! Wait for your turn...'
+                                screen: Screens.c5SubmitLie,
+                                text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
+                                question: nextTruth?.question,
+                                targetPlayer: nextTargetPlayer,
+                                instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
                             });
                         }
                     });
+                    
+                    // Send waiting to target player
+                    if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
+                        const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
+                        this.io.to(playerSocketId).emit('gameState', {
+                            screen: Screens.c2WaitingScreenJustWhateverText,
+                            text: nextTargetPlayer + ' is writing a lie! Wait for your turn...'
+                        });
+                    }
                 } else {
                     // No more players - end game
                     gameState.setPhase(GamePhase.GameOver);
