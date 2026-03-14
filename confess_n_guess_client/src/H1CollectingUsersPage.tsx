@@ -47,16 +47,20 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
             <h1>Collecting Users</h1>
             <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#4CAF50' }}>Code: {gameState?.sharedState?.code ?? "no_code"}</p>
             
-            {joinUrl && (
-                <div style={{ margin: '20px 0' }}>
-                    <QRCodeSVG value={joinUrl} size={200} />
-                    <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>Scan to join</p>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '40px', flexWrap: 'wrap' }}>
+                {joinUrl && (
+                    <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '10px' }}>
+                        <QRCodeSVG value={joinUrl} size={200} />
+                        <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>Scan to join</p>
+                    </div>
+                )}
+                
+                <div>
+                    <ul style={{ textAlign: 'left', listStyle: 'none', padding: 0 }}>
+                        {users.map((user, index) => <li key={index} style={{ padding: '5px', fontSize: '18px' }}>{user.emoji} {user.name}</li>)}
+                    </ul>
                 </div>
-            )}
-            
-            <ul style={{ textAlign: 'left', display: 'inline-block', listStyle: 'none', padding: 0 }}>
-                {users.map((user, index) => <li key={index} style={{ padding: '5px' }}>{user.emoji} {user.name}</li>)}
-            </ul>
+            </div>
             <br />
             <button onClick={startGame} disabled={!canStart}>Start</button>
             {!canStart && <p style={{ color: '#ff6b6b', marginTop: '10px' }}>Need at least 2 players to start</p>}
