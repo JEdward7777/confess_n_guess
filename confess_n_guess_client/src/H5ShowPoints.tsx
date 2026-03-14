@@ -113,37 +113,39 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
                 </div>
             )}
 
-            <div style={{ marginTop: '30px' }}>
-                <button 
-                    onClick={handleNextRound}
-                    style={{ 
-                        padding: '15px 30px', 
-                        fontSize: '18px',
-                        backgroundColor: '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        marginRight: '10px'
-                    }}
-                >
-                    Next Round
-                </button>
-                <button 
-                    onClick={handleEndGame}
-                    style={{ 
-                        padding: '15px 30px', 
-                        fontSize: '18px',
-                        backgroundColor: '#f44336',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    End Game
-                </button>
-            </div>
+            {isHost && (
+                <div style={{ marginTop: '30px' }}>
+                    <button 
+                        onClick={handleNextRound}
+                        style={{ 
+                            padding: '15px 30px', 
+                            fontSize: '18px',
+                            backgroundColor: '#4CAF50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            marginRight: '10px'
+                        }}
+                    >
+                        Next Round
+                    </button>
+                    <button 
+                        onClick={handleEndGame}
+                        style={{ 
+                            padding: '15px 30px', 
+                            fontSize: '18px',
+                            backgroundColor: '#f44336',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        End Game
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

@@ -25,13 +25,20 @@ const C4PickBestAnswer = ({ gameState }: C4PickBestAnswerProps) => {
 
     const answers = gameState.answers ?? [];
     const text = gameState.text ?? "Pick the best answer!";
+    const currentPlayerName = gameState?.name ?? '';
+
+    // Filter out user's own answer to prevent giving themselves points
+    const filteredAnswers = answers.filter((answer: UserAnswer) => answer.username !== currentPlayerName);
 
     return (
         <div>
             <h1>Which one is the TRUTH?</h1>
             <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px' }}>{text}</div>
+            {filteredAnswers.length === 0 ? (
+                <p>No answers available for voting.</p>
+            ) : (
             <div>
-                {answers.map((answer: UserAnswer) => (
+                {filteredAnswers.map((answer: UserAnswer) => (
                     <div key={answer.username} style={{ margin: '10px', padding: '15px', border: '2px solid #444', borderRadius: '8px' }}>
                         <p style={{ fontSize: '18px' }}>{answer.answer}</p>
                         <button 
@@ -43,6 +50,7 @@ const C4PickBestAnswer = ({ gameState }: C4PickBestAnswerProps) => {
                     </div>
                 ))}
             </div>
+            )}
         </div>
     );
 }

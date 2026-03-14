@@ -26,14 +26,19 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
         socket.emit( "startGame", {code:gameState?.sharedState?.code} );
     }
 
+    // Get list of users excluding host
+    const users = Object.values(gameState?.sharedState?.users ?? {}).filter( user => user.name !== "<host>" );
+    const canStart = users.length >= 2;
+
     return (
         <div>
             <h1>Collecting Users</h1>
             <p>Code: {gameState?.sharedState?.code ?? "no_code"}</p>
             <ul>
-                {Object.values(gameState?.sharedState?.users ?? {}).filter( user => user.name !== "<host>" ).map((user, index) => <li key={index}>{user.emoji} {user.name}</li>)}
+                {users.map((user, index) => <li key={index}>{user.emoji} {user.name}</li>)}
             </ul>
-            <button onClick={startGame}>Start</button>
+            <button onClick={startGame} disabled={!canStart}>Start</button>
+            {!canStart && <p style={{ color: '#ff6b6b', marginTop: '10px' }}>Need at least 2 players to start</p>}
         </div>
     );
 }

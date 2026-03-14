@@ -89,7 +89,9 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         backgroundColor: '#1a1a1a',
         minHeight: '100vh',
         color: '#fff',
-        padding: '20px'
+        padding: '20px',
+        width: '100%',
+        maxWidth: 'none'
     };
 
     return (

@@ -59,7 +59,7 @@ const C5SubmitLie = ({gameState}: C5SubmitLieProps) => {
     
     return (
         <div>
-            <h1>{gameState.instructionText || `Write a fooling answer for this question about ${targetPlayer}`}</h1>
+            <h1 style={{ fontSize: '1.5rem' }}>{gameState.instructionText || `Write a fooling answer for this question about ${targetPlayer}`}</h1>
             <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px' }}>
                 {storedQuestion}
             </div>
