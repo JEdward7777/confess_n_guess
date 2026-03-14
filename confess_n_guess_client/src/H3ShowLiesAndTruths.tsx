@@ -47,6 +47,11 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         setAllDone(false);
     }, [gameState.text, answers.length]);
 
+    // Reset countdown when new results come in (separate effect to access setCountdown)
+    useEffect(() => {
+        setCountdown(null);
+    }, [gameState.text, answers.length]);
+
     // Handle the two-stage timing for each entry
     useEffect(() => {
         if (sortedAnswers.length === 0 || allDone) return;
