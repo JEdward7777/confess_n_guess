@@ -50,7 +50,7 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         return () => clearTimeout(initialDelay);
     }, [answers.length]);
 
-    // Reveal subsequent answers with delays
+    // Dramatic reveal subsequent answers with delays
     useEffect(() => {
         if (revealedCount > 0 && revealedCount < answers.length) {
             const delay = setTimeout(() => {
@@ -66,10 +66,36 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         }
     }, [revealedCount, answers.length, allRevealed]);
 
+    // Auto-continue timer: 60 seconds after all revealed (for host only)
+    const [countdown, setCountdown] = useState<number | null>(null);
+    
+    useEffect(() => {
+        if (allRevealed && isHost && countdown === null) {
+            setCountdown(60);
+        }
+        
+        if (countdown !== null && countdown > 0) {
+            const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+            return () => clearTimeout(timer);
+        } else if (countdown === 0) {
+            // Auto-continue when timer expires
+            handleContinue();
+            setCountdown(null);
+        }
+    }, [allRevealed, isHost, countdown]);
+    
+    // Dark theme styles
+    const containerStyle = {
+        backgroundColor: '#1a1a1a',
+        minHeight: '100vh',
+        color: '#fff',
+        padding: '20px'
+    };
+
     return (
-        <div>
-            <h1 style={{ color: '#333' }}>{allRevealed ? "Results Revealed!" : "Drumroll..."}</h1>
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px', color: '#333' }}>{text}</div>
+        <div style={containerStyle}>
+            <h1 style={{ color: '#fff' }}>{allRevealed ? "Results Revealed!" : "Drumroll..."}</h1>
+            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px', color: '#ccc' }}>{text}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {answers.map((answer: UserAnswer, index: number) => {
                     const voters = (answer as any).voters || [];
@@ -79,20 +105,20 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                         <div key={answer.username} style={{ 
                             margin: '10px', 
                             padding: '20px', 
-                            border: isRevealed && answer.isTruth ? '3px solid #4CAF50' : '2px solid #666',
+                            border: isRevealed && answer.isTruth ? '3px solid #4CAF50' : '2px solid #555',
                             borderRadius: '10px',
-                            backgroundColor: isRevealed && answer.isTruth ? '#e8f5e9' : '#f5f5f5',
+                            backgroundColor: isRevealed && answer.isTruth ? '#1e3a1e' : '#2d2d2d',
                             opacity: isRevealed ? 1 : 0.5,
                             transform: isRevealed ? 'scale(1.02)' : 'scale(1)',
                             transition: 'all 0.3s ease'
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#333' }}>{answer.username}</span>
+                                <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>{answer.username}</span>
                                 {isRevealed && answer.isTruth && (
                                     <span style={{ 
-                                        color: '#4CAF50', 
+                                        color: '#1a1a1a', 
                                         fontWeight: 'bold',
-                                        backgroundColor: '#c8e6c9',
+                                        backgroundColor: '#4CAF50',
                                         padding: '4px 12px',
                                         borderRadius: '15px'
                                     }}>
@@ -101,9 +127,9 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                                 )}
                                 {isRevealed && !answer.isTruth && (
                                     <span style={{ 
-                                        color: '#666', 
+                                        color: '#1a1a1a', 
                                         fontWeight: 'bold',
-                                        backgroundColor: '#e0e0e0',
+                                        backgroundColor: '#888',
                                         padding: '4px 12px',
                                         borderRadius: '15px'
                                     }}>
@@ -111,18 +137,18 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                                     </span>
                                 )}
                             </div>
-                            <p style={{ fontSize: '18px', margin: '10px 0', color: '#333' }}>
+                            <p style={{ fontSize: '18px', margin: '10px 0', color: '#fff' }}>
                                 {isRevealed ? answer.answer : "???"}
                             </p>
                             
                             {/* Show voters if available */}
                             {hasVoters && isRevealed && voters.length > 0 && (
-                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#333' }}>
+                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#ccc' }}>
                                     Voted by: {voters.join(', ')}
                                 </div>
                             )}
                             {hasVoters && isRevealed && voters.length === 0 && answer.isTruth && (
-                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#c0392b' }}>
+                                <div style={{ marginTop: '10px', fontSize: '14px', color: '#e74c3c' }}>
                                     No one guessed the truth!
                                 </div>
                             )}
@@ -137,21 +163,27 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
             )}
             
             {isHost && allRevealed && (
-                <button 
-                    onClick={handleContinue}
-                    style={{ 
-                        marginTop: '30px',
-                        padding: '15px 30px', 
-                        fontSize: '18px',
-                        backgroundColor: '#2196F3',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    Continue
-                </button>
+                <div style={{ marginTop: '30px', textAlign: 'center' }}>
+                    <button 
+                        onClick={handleContinue}
+                        style={{ 
+                            padding: '15px 30px', 
+                            fontSize: '18px',
+                            backgroundColor: '#2196F3',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Continue
+                    </button>
+                    {countdown !== null && (
+                        <p style={{ marginTop: '10px', color: '#888', fontSize: '14px' }}>
+                            Auto-continue in {countdown} seconds
+                        </p>
+                    )}
+                </div>
             )}
         </div>
     );

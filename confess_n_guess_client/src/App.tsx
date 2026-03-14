@@ -18,6 +18,10 @@ import H5ShowPoints from './H5ShowPoints';
 import H6ShowWinner from './H6ShowWinner';
 
 function App() {
+  // Check if we should show the new game screen
+  const urlParams = new URLSearchParams(window.location.search);
+  const showNewGame = urlParams.get('new') === '1';
+  
   //have a state representing what screen we are on.
   const [gameState, _setGameState] = useState<ClientGameState>({
     sharedState: {
@@ -26,7 +30,7 @@ function App() {
     },
     name: "",
     emoji: "",
-    screen : Screens.g1NewGame,
+    screen : showNewGame ? Screens.g1NewGame : Screens.g1NewGame,
     error: "",
   });
   const gameStateRef = useRef<ClientGameState>( gameState );
@@ -97,6 +101,21 @@ function App() {
       window.location.hash = urlParams.toString();
       localStorage.setItem( 'gameState-' + clientId, JSON.stringify( gameStateRef.current ) );
     }
+  }, []);
+  
+  // Handle hash changes for navigation
+  useEffect(() => {
+    function handleHashChange() {
+      const hash = window.location.hash;
+      if (hash === '#new') {
+        // Clear the hash and go to new game screen
+        window.location.hash = '';
+        setGameState({ screen: Screens.g1NewGame });
+      }
+    }
+    
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   //now use useEffect to save the game state each time it changes.

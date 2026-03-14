@@ -1,7 +1,7 @@
 //@ts-ignore
 import { socket } from './socket';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { ClientGameState, LeaderboardEntry } from './../../src/IncludeStuff';
 
@@ -13,9 +13,29 @@ interface H5ShowPointsProps {
 const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
 
     const isHost = gameState.name === '<host>';
+    const code = gameState.sharedState?.code;
+    
+    // Auto-continue timer: 60 seconds
+    const [countdown, setCountdown] = useState<number | null>(null);
+    
+    useEffect(() => {
+        if (isHost && countdown === null) {
+            setCountdown(60);
+        }
+        
+        if (countdown !== null && countdown > 0) {
+            const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+            return () => clearTimeout(timer);
+        } else if (countdown === 0) {
+            // Auto-continue when timer expires
+            if (code) {
+                socket.emit('continueFromScores', { code });
+            }
+            setCountdown(null);
+        }
+    }, [isHost, countdown, code]);
 
     const handleContinue = () => {
-        const code = gameState.sharedState?.code;
         if (code) {
             socket.emit('continueFromScores', { code });
         }
@@ -70,7 +90,7 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
             </div>
 
             {isHost && (
-                <div style={{ marginTop: '30px' }}>
+                <div style={{ marginTop: '30px', textAlign: 'center' }}>
                     <button 
                         onClick={handleContinue}
                         style={{ 
@@ -85,6 +105,11 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
                     >
                         Continue
                     </button>
+                    {countdown !== null && (
+                        <p style={{ marginTop: '10px', color: '#888', fontSize: '14px' }}>
+                            Auto-continue in {countdown} seconds
+                        </p>
+                    )}
                 </div>
             )}
 
