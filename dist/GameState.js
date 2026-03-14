@@ -286,16 +286,37 @@ class GameState {
         const nextIndex = currentIndex + 1;
         return nextIndex < userNames.length ? userNames[nextIndex] : null;
     }
+    // Get next player for lie round, skipping players without a truth
+    getNextLieTargetPlayerSkippingMissing() {
+        const userNames = this.getUserNames();
+        // Start from the current player
+        let currentIndex = this.currentLieTargetPlayer
+            ? userNames.indexOf(this.currentLieTargetPlayer)
+            : -1;
+        // Try to find the next player with a truth
+        for (let i = 1; i < userNames.length; i++) {
+            const nextIndex = (currentIndex + i) % userNames.length;
+            const player = userNames[nextIndex];
+            if (this.userAnswers[player]) {
+                return player;
+            }
+        }
+        return null; // No players with truths found
+    }
     // Advance to next lie target player
     nextLieTarget() {
-        const next = this.getNextLieTargetPlayer();
+        const next = this.getNextLieTargetPlayerSkippingMissing();
         if (next) {
             this.currentLieTargetPlayer = next;
         }
     }
     // Check if all lie rounds are done
     isLiePhaseDone() {
-        return this.getNextLieTargetPlayer() === null && this.currentLieTargetPlayer !== '';
+        return this.getNextLieTargetPlayerSkippingMissing() === null && this.currentLieTargetPlayer !== '';
+    }
+    // Check if there are more targets with truths (for continuing after showing points)
+    hasMoreLieTargets() {
+        return this.getNextLieTargetPlayerSkippingMissing() !== null;
     }
     // Reset lies and votes for new game
     resetLieData() {

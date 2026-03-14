@@ -523,8 +523,8 @@ class SocketHandlers {
                 if (gameState.allUsersHaveAnswered()) {
                     console.log('ALL PLAYERS HAVE ANSWERED! Transitioning to lie phase.');
                     // All truths are in! Start the lie phase.
-                    // Get first player to target
-                    const firstTarget = gameState.getNextLieTargetPlayer();
+                    // Get first player to target (use skipping method for consistency)
+                    const firstTarget = gameState.getNextLieTargetPlayerSkippingMissing();
                     console.log('First target player:', firstTarget);
                     if (firstTarget) {
                         gameState.setCurrentLieTargetPlayer(firstTarget);
@@ -814,9 +814,9 @@ class SocketHandlers {
             code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState && gameState.getPhase() === GameState_1.GamePhase.ShowingPoints) {
-                const hasMoreTargets = gameState.getNextLieTargetPlayer() !== null;
+                const hasMoreTargets = gameState.hasMoreLieTargets();
                 if (hasMoreTargets) {
-                    // More players to process - move to next lie target
+                    // More players to process - move to next lie target (skipping those without truths)
                     gameState.nextLieTarget();
                     gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
                     gameState.setTimerValue(60);
@@ -893,7 +893,8 @@ class SocketHandlers {
                 // Timer expired during truth phase - check if we have answers, then start lie phase
                 if (gameState.allUsersHaveAnswered()) {
                     // All answered, start lie phase (same logic as in sendQuestionAnswer)
-                    const firstTarget = gameState.getNextLieTargetPlayer();
+                    // Use skipping method to handle any players who didn't submit truths
+                    const firstTarget = gameState.getNextLieTargetPlayerSkippingMissing();
                     if (firstTarget) {
                         gameState.setCurrentLieTargetPlayer(firstTarget);
                         gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
@@ -966,7 +967,8 @@ class SocketHandlers {
                     }
                     // PROCEED with game using available answers!
                     console.log('Timer expired but not all answered - proceeding with ' + answerCount + ' answers');
-                    const firstTarget = gameState.getNextLieTargetPlayer();
+                    // Use skipping method to handle players who didn't submit truths
+                    const firstTarget = gameState.getNextLieTargetPlayerSkippingMissing();
                     if (firstTarget) {
                         gameState.setCurrentLieTargetPlayer(firstTarget);
                         gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
@@ -1281,7 +1283,8 @@ class SocketHandlers {
                                 text: 'Points have been awarded!'
                             });
                             setTimeout(() => {
-                                const nextTarget = gameState.getNextLieTargetPlayer();
+                                // Use skipping method to handle players without truths
+                                const nextTarget = gameState.getNextLieTargetPlayerSkippingMissing();
                                 if (nextTarget) {
                                     gameState.setCurrentLieTargetPlayer(nextTarget);
                                     gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
