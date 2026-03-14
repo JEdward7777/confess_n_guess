@@ -234,7 +234,7 @@ export class SocketHandlers {
                 } else {
                     // Send question to answer
                     const questionObj = gameState.getNextQuestion();
-                    screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
+                    screenToSend = Screens.c3SubmitTruth;
                     questionText = questionObj?.question || '';
                     instructionText = 'Please answer this question truthfully about yourself';
                     textToSend = questionObj ? `Please answer this question:\n\n${questionObj.question}` : 'No question available';
@@ -252,7 +252,7 @@ export class SocketHandlers {
                         screenToSend = Screens.c2WaitingScreenJustWhateverText;
                         textToSend = 'Your lie has been submitted! Please wait for others...';
                     } else {
-                        screenToSend = Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer;
+                        screenToSend = Screens.c5SubmitLie;
                         questionText = truth?.question || '';
                         instructionText = `Write a fooling answer for this question about ${targetPlayer}`;
                         textToSend = truth ? `Write a LIE for this question about ${targetPlayer}:\n\n${truth.question}` : 'No question available';
@@ -529,7 +529,7 @@ export class SocketHandlers {
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                             const playerSocketId = socketInfo.playerSockets[username];
                             this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                screen: Screens.c3SubmitTruth,
                                 text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                                 question: questionObj.question,
                                 questionIndex: questionObj.index,
@@ -594,7 +594,7 @@ export class SocketHandlers {
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                                     const playerSocketId = socketInfo.playerSockets[username];
                                     this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        screen: Screens.c5SubmitLie,
                                         text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
                                         question: truth?.question || '',
                                         targetPlayer: firstTarget,
@@ -853,7 +853,7 @@ export class SocketHandlers {
                     const questionObj = gameState.getNextQuestion();
                     if (questionObj) {
                         this.sendToPlayers(code, {
-                            screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                            screen: Screens.c3SubmitTruth,
                             text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                             question: questionObj.question,
                             questionIndex: questionObj.index,
@@ -915,7 +915,7 @@ export class SocketHandlers {
                     if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
                         const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
                         this.io.to(playerSocketId).emit('gameState', {
-                            screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                            screen: Screens.c5SubmitLie,
                             text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
                             question: nextTruth?.question,
                             instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
@@ -1018,7 +1018,7 @@ export class SocketHandlers {
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                                     const playerSocketId = socketInfo.playerSockets[username];
                                     this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        screen: Screens.c5SubmitLie,
                                         text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
                                         question: truth?.question || '',
                                         targetPlayer: firstTarget,
@@ -1063,10 +1063,11 @@ export class SocketHandlers {
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                                     const playerSocketId = socketInfo.playerSockets[username];
                                     this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        screen: Screens.c3SubmitTruth,
                                         text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                                         question: questionObj.question,
-                                        questionIndex: questionObj.index
+                                        questionIndex: questionObj.index,
+                                        instructionText: 'Please answer this question truthfully about yourself'
                                     });
                                 }
                             }
@@ -1098,7 +1099,7 @@ export class SocketHandlers {
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                                     const playerSocketId = socketInfo.playerSockets[username];
                                     this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        screen: Screens.c5SubmitLie,
                                         text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
                                         question: truth?.question || '',
                                         targetPlayer: firstTarget,
@@ -1205,7 +1206,7 @@ export class SocketHandlers {
                                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                                             const playerSocketId = socketInfo.playerSockets[username];
                                             this.io.to(playerSocketId).emit('gameState', {
-                                                screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                                screen: Screens.c3SubmitTruth,
                                                 text: `Please truthfully answer this question:\n\n${questionObj.question}`,
                                                 question: questionObj.question,
                                                 questionIndex: questionObj.index,
@@ -1237,7 +1238,7 @@ export class SocketHandlers {
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
                                     const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
                                     this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        screen: Screens.c5SubmitLie,
                                         text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
                                         question: nextTruth?.question,
                                         instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
@@ -1451,7 +1452,7 @@ export class SocketHandlers {
                                             if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
                                                 const playerSocketId = socketInfo.playerSockets[username];
                                                 this.io.to(playerSocketId).emit('gameState', {
-                                                    screen: Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                                    screen: Screens.c5SubmitLie,
                                                     text: 'Write a LIE for ' + nextTarget + '!',
                                                     question: nextTruth?.question || '',
                                                     targetPlayer: nextTarget,

@@ -12,7 +12,8 @@ var Screens;
     Screens[Screens["h6ShowTheWinner"] = 6] = "h6ShowTheWinner";
     Screens[Screens["c1TypeInYourNameAndPickAnEmojiForYourPicture"] = 7] = "c1TypeInYourNameAndPickAnEmojiForYourPicture";
     Screens[Screens["c2WaitingScreenJustWhateverText"] = 8] = "c2WaitingScreenJustWhateverText";
-    Screens[Screens["c3ShowsQuestionAndLetsYouTypeInAnAnswer"] = 9] = "c3ShowsQuestionAndLetsYouTypeInAnAnswer";
+    Screens[Screens["c3SubmitTruth"] = 9] = "c3SubmitTruth";
     Screens[Screens["c4PickTheBestAnswerOutOfAList"] = 10] = "c4PickTheBestAnswerOutOfAList";
+    Screens[Screens["c5SubmitLie"] = 11] = "c5SubmitLie";
 })(Screens || (exports.Screens = Screens = {}));
 //# sourceMappingURL=IncludeStuff.js.map

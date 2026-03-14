@@ -28,8 +28,9 @@ export enum Screens {
     h6ShowTheWinner = 6,
     c1TypeInYourNameAndPickAnEmojiForYourPicture = 7,
     c2WaitingScreenJustWhateverText = 8,
-    c3ShowsQuestionAndLetsYouTypeInAnAnswer = 9,
-    c4PickTheBestAnswerOutOfAList = 10
+    c3SubmitTruth = 9,
+    c4PickTheBestAnswerOutOfAList = 10,
+    c5SubmitLie = 11
 }
 
 export interface SharedState {

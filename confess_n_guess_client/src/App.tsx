@@ -9,8 +9,9 @@ import React, { useEffect } from 'react';
 import {socket } from './socket';
 import C1TypeInYourNameAndPickAnEmojiForYourPicturePage from './C1TypeInYourNameAndPickAnEmojiForYourPicturePage';
 import C2WaitingScreen from './C2WaitingScreen';
-import C3ShowsQuestionAndLetsYouTypeInAnAnswer from './C3ShowsQuestionAndLetsYouTypeInAnAnswer';
+import C3SubmitTruth from './C3SubmitTruth';
 import C4PickBestAnswer from './C4PickBestAnswer';
+import C5SubmitLie from './C5SubmitLie';
 import H2InformationScreenWithTimer from './H2InformationScreenWithTimer';
 import H3ShowLiesAndTruths from './H3ShowLiesAndTruths';
 import H4IterateAnswers from './H4IterateAnswers';
@@ -162,8 +163,9 @@ function App() {
       {screen === Screens.h6ShowTheWinner && <H6ShowWinner gameState={gameState} />}
       {screen === Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture && <C1TypeInYourNameAndPickAnEmojiForYourPicturePage gameState={gameState}/>}
       {screen === Screens.c2WaitingScreenJustWhateverText && <C2WaitingScreen gameState={gameState} />}
-      {screen === Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer && <C3ShowsQuestionAndLetsYouTypeInAnAnswer gameState={gameState} />}
+      {screen === Screens.c3SubmitTruth && <C3SubmitTruth gameState={gameState} />}
       {screen === Screens.c4PickTheBestAnswerOutOfAList && <C4PickBestAnswer gameState={gameState} />}
+      {screen === Screens.c5SubmitLie && <C5SubmitLie gameState={gameState} />}
     </div>
   )
 }
