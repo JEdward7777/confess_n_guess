@@ -110,7 +110,25 @@ function App() {
       if (hash === '#new') {
         // Clear the hash and go to new game screen
         window.location.hash = '';
-        setGameState({ screen: Screens.g1NewGame });
+        
+        // Also clear the saved state from localStorage to prevent old data persisting
+        const urlParams = new URLSearchParams(window.location.hash.substring(1));
+        const clientId = urlParams.get('clientId');
+        if (clientId) {
+          localStorage.removeItem('gameState-' + clientId);
+        }
+        
+        // Reset to fresh state
+        setGameState({
+          sharedState: {
+            users: {},
+            code: "",
+          },
+          name: "",
+          emoji: "",
+          screen: Screens.g1NewGame,
+          error: "",
+        });
       }
     }
     

@@ -588,74 +588,7 @@ class SocketHandlers {
                             });
                         }
                     });
-                    // After a delay, show points then move to next player
-                    setTimeout(() => {
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h5ShowThePointsForTheRound,
-                            text: 'Points for ' + targetPlayer + "'s round!",
-                            leaderboard
-                        });
-                        this.sendToPlayers(code, {
-                            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                            text: 'Points have been awarded! Check the leaderboard on the host screen.'
-                        });
-                        // Move to next player or end game
-                        setTimeout(() => {
-                            const nextTarget = gameState.getNextLieTargetPlayer();
-                            if (nextTarget) {
-                                // Continue to next player
-                                gameState.setCurrentLieTargetPlayer(nextTarget);
-                                gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
-                                const nextTruth = gameState.getTruthForPlayer(nextTarget);
-                                const nextUserNames = gameState.getUserNames();
-                                // Send timer to host
-                                this.sendToHost(code, {
-                                    screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                                    text: 'Now submitting lies for ' + nextTarget + '!',
-                                    timerValue: 60
-                                });
-                                // Send lie prompt to all OTHER players
-                                nextUserNames.forEach(username => {
-                                    if (username !== nextTarget) {
-                                        const socketInfo = this.socketStuff[code];
-                                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                            const playerSocketId = socketInfo.playerSockets[username];
-                                            this.io.to(playerSocketId).emit('gameState', {
-                                                screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
-                                                text: 'Write a LIE for this question about ' + nextTarget + ':\n\n' + ((nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || ''),
-                                                question: (nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || '',
-                                                targetPlayer: nextTarget
-                                            });
-                                        }
-                                    }
-                                });
-                                // Send waiting to target player
-                                if (this.socketStuff[code] && this.socketStuff[code].playerSockets && this.socketStuff[code].playerSockets[nextTarget]) {
-                                    const playerSocketId = this.socketStuff[code].playerSockets[nextTarget];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                        text: 'Your turn! Others will submit lies for your question.'
-                                    });
-                                }
-                            }
-                            else {
-                                // All rounds done! Show winner
-                                gameState.setPhase(GameState_1.GamePhase.GameOver);
-                                const finalLeaderboard = gameState.getLeaderboard();
-                                const winner = finalLeaderboard[0];
-                                this.sendToHost(code, {
-                                    screen: IncludeStuff_1.Screens.h6ShowTheWinner,
-                                    text: 'Winner: ' + winner.name + ' with ' + winner.points + ' points!',
-                                    leaderboard: finalLeaderboard
-                                });
-                                this.sendToPlayers(code, {
-                                    screen: IncludeStuff_1.Screens.h6ShowTheWinner,
-                                    text: 'Winner: ' + winner.name + ' with ' + winner.points + ' points!',
-                                    leaderboard: finalLeaderboard
-                                });
-                            }
-                        }, 5000); // 5 second delay before next round
-                    }, 5000); // 5 second delay before showing points
+                    // DO NOT auto-continue - wait for host to click Continue
                 }
                 else {
                     // Send waiting to player
@@ -861,10 +794,41 @@ class SocketHandlers {
                     }
                 }
                 else {
-                    // Not all answered - PROCEED with game using available answers!
-                    // Don't go back to lobby - just continue with who we have
-                    console.log('Timer expired but not all answered - proceeding with ' +
-                        Object.keys(gameState['userAnswers'] || {}).length + ' answers');
+                    // Not all answered - check if ANY answers were submitted
+                    const answerCount = Object.keys(gameState['userAnswers'] || {}).length;
+                    if (answerCount === 0) {
+                        // No one submitted any answers - restart the round
+                        console.log('No answers submitted - restarting round');
+                        gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
+                        gameState.clearAnswers();
+                        gameState.setTimerValue(30);
+                        // Send timer screen to host only
+                        this.sendToHost(code, {
+                            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
+                            text: 'No answers submitted! Please answer the questions.',
+                            timerValue: 30
+                        });
+                        // Re-send questions to all players
+                        const userNames = gameState.getUserNames();
+                        userNames.forEach(username => {
+                            const questionObj = gameState.getNextQuestion();
+                            if (questionObj) {
+                                const socketInfo = this.socketStuff[code];
+                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
+                                    const playerSocketId = socketInfo.playerSockets[username];
+                                    this.io.to(playerSocketId).emit('gameState', {
+                                        screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                        text: `Please truthfully answer this question:\n\n${questionObj.question}`,
+                                        question: questionObj.question,
+                                        questionIndex: questionObj.index
+                                    });
+                                }
+                            }
+                        });
+                        return;
+                    }
+                    // PROCEED with game using available answers!
+                    console.log('Timer expired but not all answered - proceeding with ' + answerCount + ' answers');
                     const firstTarget = gameState.getNextLieTargetPlayer();
                     if (firstTarget) {
                         gameState.setCurrentLieTargetPlayer(firstTarget);
@@ -952,8 +916,43 @@ class SocketHandlers {
                         const truth = gameState.getTruthForPlayer(targetPlayer);
                         const lies = gameState.getLiesForPlayer(targetPlayer);
                         const userNames = gameState.getUserNames();
-                        // If no lies were submitted, skip this player and move to next
+                        // If no lies were submitted, check if this is the first target
+                        // If so, restart the round
                         if (lies.length === 0) {
+                            const allUserNames = gameState.getUserNames();
+                            // Check if this is the first target
+                            const firstTarget = allUserNames[0];
+                            if (targetPlayer === firstTarget) {
+                                // No lies for the first player - restart the game
+                                console.log('No lies submitted for first player - restarting round');
+                                gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
+                                gameState.clearAnswers();
+                                gameState.setTimerValue(30);
+                                // Send timer screen to host only
+                                this.sendToHost(code, {
+                                    screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
+                                    text: 'No lies submitted! Starting fresh round.',
+                                    timerValue: 30
+                                });
+                                // Re-send questions to all players
+                                allUserNames.forEach(username => {
+                                    const questionObj = gameState.getNextQuestion();
+                                    if (questionObj) {
+                                        const socketInfo = this.socketStuff[code];
+                                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
+                                            const playerSocketId = socketInfo.playerSockets[username];
+                                            this.io.to(playerSocketId).emit('gameState', {
+                                                screen: IncludeStuff_1.Screens.c3ShowsQuestionAndLetsYouTypeInAnAnswer,
+                                                text: `Please truthfully answer this question:\n\n${questionObj.question}`,
+                                                question: questionObj.question,
+                                                questionIndex: questionObj.index
+                                            });
+                                        }
+                                    }
+                                });
+                                return;
+                            }
+                            // Not first target - skip to next player
                             console.log('No lies submitted for ' + targetPlayer + ', skipping to next player');
                             // Move to next target player
                             gameState.nextLieTarget();
