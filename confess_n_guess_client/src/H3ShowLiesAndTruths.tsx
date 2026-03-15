@@ -10,6 +10,14 @@ interface H3ShowLiesAndTruthsProps {
     gameState: ClientGameState
 }
 
+// Type guard to check if an answer object has required properties
+function isValidAnswer(answer: any): answer is { username: string; answer: string; isTruth: boolean; voters?: string[] } {
+    return answer && typeof answer === 'object' && 
+           typeof answer.username === 'string' && 
+           typeof answer.answer === 'string' && 
+           typeof answer.isTruth === 'boolean';
+}
+
 const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
     const answers = gameState.answers ?? [];
@@ -23,14 +31,20 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         }
     };
 
-    // Check if we have voter info (lie results phase)
-    const hasVoters = answers.length > 0 && (answers[0] as any).voters !== undefined;
+    // Filter out invalid answers and validate data
+    const validAnswers = answers.filter(isValidAnswer);
 
-    // Sort answers: lies first, then truth last
-    const sortedAnswers = [...answers].sort((a, b) => {
+    // Check if we have voter info (lie results phase) - safely check first valid answer
+    const hasVoters = validAnswers.length > 0 && Array.isArray(validAnswers[0]?.voters);
+
+    // Sort answers: lies first, then truth last - with safe property access
+    const sortedAnswers = [...validAnswers].sort((a, b) => {
+        // Default to false if isTruth is missing
+        const aIsTruth = a?.isTruth ?? false;
+        const bIsTruth = b?.isTruth ?? false;
         // If one is truth and one is lie, truth goes last
-        if (a.isTruth !== b.isTruth) {
-            return a.isTruth ? 1 : -1;
+        if (aIsTruth !== bIsTruth) {
+            return aIsTruth ? 1 : -1;
         }
         return 0;
     });
@@ -97,9 +111,15 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         }
     }, [allDone, isHost, countdown]);
 
-    // Get current answer
-    const currentAnswer = sortedAnswers[currentIndex];
-    const voters = currentAnswer ? (currentAnswer as any).voters || [] : [];
+    // Get current answer - with safe defaults
+    const currentAnswer = sortedAnswers[currentIndex] ?? null;
+    // Safely get voters array - ensure it's an array
+    const voters = (currentAnswer && Array.isArray(currentAnswer.voters)) ? currentAnswer.voters : [];
+    
+    // Safe accessors for currentAnswer properties
+    const currentIsTruth = currentAnswer?.isTruth ?? false;
+    const currentAnswerText = currentAnswer?.answer ?? '';
+    const currentUsername = currentAnswer?.username ?? 'Unknown';
 
     // Dark theme styles - use inline styles to bypass App constraints
     return (
@@ -121,16 +141,16 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                 <div style={{
                     margin: '10px',
                     padding: '20px',
-                    border: currentAnswer.isTruth ? '3px solid #4CAF50' : '2px solid #555',
+                    border: currentIsTruth ? '3px solid #4CAF50' : '2px solid #555',
                     borderRadius: '10px',
-                    backgroundColor: currentAnswer.isTruth ? '#1e3a1e' : '#2d2d2d',
+                    backgroundColor: currentIsTruth ? '#1e3a1e' : '#2d2d2d',
                     transition: 'all 0.3s ease'
                 }}>
                     {/* When all done, always show the reveal stage (truth/lie + submitter) */}
                     {(allDone || stage === 'reveal') && (
                         <>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                                {currentAnswer.isTruth && (
+                                {currentIsTruth && (
                                     <span style={{
                                         color: '#1a1a1a',
                                         fontWeight: 'bold',
@@ -141,7 +161,7 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                                         ✓ TRUTH
                                     </span>
                                 )}
-                                {!currentAnswer.isTruth && (
+                                {!currentIsTruth && (
                                     <span style={{
                                         color: '#1a1a1a',
                                         fontWeight: 'bold',
@@ -154,17 +174,17 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                                 )}
                             </div>
                             <p style={{ fontSize: '24px', margin: '10px 0', color: '#fff', fontWeight: 'bold' }}>
-                                {currentAnswer.answer}
+                                {currentAnswerText}
                             </p>
                             <div style={{ marginTop: '10px', fontSize: '14px', color: '#ccc' }}>
-                                Submitted by: {currentAnswer.username}
+                                Submitted by: {currentUsername}
                             </div>
                             {hasVoters && voters.length > 0 && (
                                 <div style={{ marginTop: '5px', fontSize: '14px', color: '#ccc' }}>
                                     Voted by: {voters.join(', ')}
                                 </div>
                             )}
-                            {hasVoters && voters.length === 0 && currentAnswer.isTruth && (
+                            {hasVoters && voters.length === 0 && currentIsTruth && (
                                 <div style={{ marginTop: '10px', fontSize: '16px', color: '#e74c3c' }}>
                                     No one guessed the truth!
                                 </div>
@@ -176,7 +196,7 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                     {!allDone && stage === 'answer' && (
                         <>
                             <p style={{ fontSize: '24px', margin: '10px 0', color: '#fff', fontWeight: 'bold' }}>
-                                {currentAnswer.answer}
+                                {currentAnswerText}
                             </p>
                             {hasVoters && voters.length > 0 && (
                                 <div style={{ marginTop: '10px', fontSize: '16px', color: '#ccc' }}>
@@ -190,6 +210,13 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                             )}
                         </>
                     )}
+                </div>
+            )}
+
+            {/* Show message if no valid answers */}
+            {!currentAnswer && !allDone && (
+                <div style={{ padding: '20px', color: '#888', textAlign: 'center' }}>
+                    <p>Waiting for results...</p>
                 </div>
             )}
 
