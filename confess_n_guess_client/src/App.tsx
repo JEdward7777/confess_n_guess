@@ -23,6 +23,7 @@ function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const showNewGame = urlParams.get('new') === '1';
   const joinCode = urlParams.get('code');
+  const joinName = urlParams.get('name'); // Get name from URL for reconnection
   
   //have a state representing what screen we are on.
   const [gameState, _setGameState] = useState<ClientGameState>({
@@ -30,7 +31,7 @@ function App() {
       users: {},
       code: joinCode || "",
     },
-    name: "",
+    name: joinName || "", // Use name from URL if available
     emoji: "",
     screen : showNewGame ? Screens.g1NewGame : (joinCode ? Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture : Screens.g1NewGame),
     error: "",
@@ -86,22 +87,19 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Retrieve the client ID from the URL hash on component remount.
-    const urlParams = new URLSearchParams(window.location.hash.substring(1));
-    const savedClientId = urlParams.get('clientId');
-    if( savedClientId ) {
-      //check localStorage for the client id
-      const savedStateString = localStorage.getItem( 'gameState-' + savedClientId );
-      if( savedStateString ) {
-        const savedState = JSON.parse( savedStateString );
+    // Retrieve game state using game code and name from URL query params
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const name = urlParams.get('name');
+    
+    if (code && name) {
+      // Use gameCode + name as the localStorage key for persistent state
+      const storageKey = `gameState-${code}-${name}`;
+      const savedStateString = localStorage.getItem(storageKey);
+      if (savedStateString) {
+        const savedState = JSON.parse(savedStateString);
         setGameState(savedState);
       }
-    } else {
-      //generate a new client id
-      const clientId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      urlParams.set('clientId', clientId);
-      window.location.hash = urlParams.toString();
-      localStorage.setItem( 'gameState-' + clientId, JSON.stringify( gameStateRef.current ) );
     }
   }, []);
   
@@ -114,10 +112,11 @@ function App() {
         window.location.hash = '';
         
         // Also clear the saved state from localStorage to prevent old data persisting
-        const urlParams = new URLSearchParams(window.location.hash.substring(1));
-        const clientId = urlParams.get('clientId');
-        if (clientId) {
-          localStorage.removeItem('gameState-' + clientId);
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const name = urlParams.get('name');
+        if (code && name) {
+          localStorage.removeItem(`gameState-${code}-${name}`);
         }
         
         // Reset to fresh state
@@ -140,14 +139,23 @@ function App() {
 
   //now use useEffect to save the game state each time it changes.
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.hash.substring(1));
-    let savedClientId = urlParams.get('clientId');
-    if( !savedClientId ) {
-      savedClientId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      urlParams.set('clientId', savedClientId);
-      window.location.hash = urlParams.toString();
+    const code = gameStateRef.current?.sharedState?.code;
+    const name = gameStateRef.current?.name;
+    
+    // Only save if we have both code and name
+    if (code && name) {
+      const storageKey = `gameState-${code}-${name}`;
+      localStorage.setItem(storageKey, JSON.stringify(gameStateRef.current));
+      
+      // Update URL to include name for easy reconnection
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('code') !== code || urlParams.get('name') !== name) {
+        urlParams.set('code', code);
+        urlParams.set('name', name);
+        const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+        window.history.replaceState({}, '', newUrl);
+      }
     }
-    localStorage.setItem( 'gameState-' + savedClientId, JSON.stringify( gameStateRef.current ) );
   }, [gameState]);
 
   console.log( "Screen is ", screen );

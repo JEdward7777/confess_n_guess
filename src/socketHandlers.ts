@@ -23,7 +23,7 @@ interface GamesStore {
 
 interface SocketStuff {
     hostSocketId?: string;
-    playerSockets: { [username: string]: string };
+    playerSockets: { [username: string]: string[] };
 }
 
 export class SocketHandlers {
@@ -50,6 +50,27 @@ export class SocketHandlers {
 
     private sendToSocket(socketId: string, event: string, data: any): void {
         this.io.to(socketId).emit(event, data);
+    }
+    
+    /**
+     * Send a message to all sockets for a specific user.
+     * This supports multiple devices/tabs for the same user.
+     */
+    private sendToUserSockets(code: string, username: string, event: string, data: any): void {
+        const socketInfo = this.socketStuff[code];
+        if (!socketInfo || !socketInfo.playerSockets || !socketInfo.playerSockets[username]) {
+            return;
+        }
+        
+        const socketIds = socketInfo.playerSockets[username];
+        if (!socketIds || socketIds.length === 0) {
+            return;
+        }
+        
+        // Send to all sockets for this user
+        socketIds.forEach(socketId => {
+            this.io.to(socketId).emit(event, data);
+        });
     }
 
     private sendToHost(gameCode: string, data: ClientGameState): void {
@@ -374,6 +395,34 @@ export class SocketHandlers {
 
         socket.on('disconnect', () => {
             console.log('user disconnected', socket.id);
+            
+            // Clean up this socket from all games' socket tracking
+            // IMPORTANT: Do NOT remove player from game state - only clean up socket connections
+            for (const code in this.socketStuff) {
+                const socketInfo = this.socketStuff[code];
+                
+                // Check if this was the host socket
+                if (socketInfo.hostSocketId === socket.id) {
+                    socketInfo.hostSocketId = undefined;
+                    console.log('Host disconnected from game ' + code);
+                }
+                
+                // Remove this socket from all players' socket arrays
+                for (const username in socketInfo.playerSockets) {
+                    const socketArray = socketInfo.playerSockets[username];
+                    const index = socketArray.indexOf(socket.id);
+                    if (index > -1) {
+                        socketArray.splice(index, 1);
+                        console.log(`Socket ${socket.id} removed from player ${username} in game ${code}`);
+                    }
+                    
+                    // Clean up empty arrays (user has no active sockets)
+                    if (socketArray.length === 0) {
+                        delete socketInfo.playerSockets[username];
+                        console.log(`Player ${username} has no active sockets in game ${code} (game state preserved)`);
+                    }
+                }
+            }
         });
 
         socket.on('newGame', () => {
@@ -446,41 +495,53 @@ export class SocketHandlers {
                 this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
             }
             
-            if (role === 'host') {
-                this.socketStuff[code].hostSocketId = socket.id;
-                console.log('>>> HOST IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
-            } else if (role === 'player' && name) {
-                this.socketStuff[code].playerSockets[name] = socket.id;
-                console.log('>>> PLAYER ' + name + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
-            }
+         if (role === 'host') {
+                 this.socketStuff[code].hostSocketId = socket.id;
+                 console.log('>>> HOST IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+             } else if (role === 'player' && name) {
+                 if (!this.socketStuff[code].playerSockets[name]) {
+                     this.socketStuff[code].playerSockets[name] = [];
+                 }
+                 // Only add if not already present
+                 if (!this.socketStuff[code].playerSockets[name].includes(socket.id)) {
+                     this.socketStuff[code].playerSockets[name].push(socket.id);
+                 }
+                 console.log('>>> PLAYER ' + name + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+             }
         });
 
         socket.on('nameAndEmoji', ({ name, emoji, code }: { name: string; emoji: string; code: string }) => {
             code = normalizeCode(code);
             const gameState = this.games[code];
             
-            if (gameState) {
-                // Initialize socket tracking if not exists (for loaded games)
-                if (!this.socketStuff[code]) {
-                    this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
-                }
-                
-                // If user already exists, replace them (allows reconnection)
-                if (gameState.userExists(name)) {
-                    gameState.removeUser(name);
-                    // Remove old socket mapping
-                    if (this.socketStuff[code] && this.socketStuff[code].playerSockets) {
-                        delete this.socketStuff[code].playerSockets[name];
-                    }
-                }
-                
-                gameState.addUser(name, emoji);
-                socket.join(code);
-                
-                // Track player socket
-                if (this.socketStuff[code]) {
-                    this.socketStuff[code].playerSockets[name] = socket.id;
-                }
+             if (gameState) {
+                 // Initialize socket tracking if not exists (for loaded games)
+                 if (!this.socketStuff[code]) {
+                     this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+                 }
+                 
+                 // If user already exists, KEEP their state and just add new socket connection
+                 // This preserves their game state (points, answers, lies, etc.) on reconnection
+                 if (gameState.userExists(name)) {
+                     // User already exists - preserve their state, just add new socket connection
+                     // Don't remove them or destroy their game state
+                 } else {
+                     // New user - add them to the game
+                     gameState.addUser(name, emoji);
+                 }
+                 
+                 socket.join(code);
+                 
+                 // Track player socket - ADD to array, don't replace
+                 if (this.socketStuff[code]) {
+                     if (!this.socketStuff[code].playerSockets[name]) {
+                         this.socketStuff[code].playerSockets[name] = [];
+                     }
+                     // Only add if not already present
+                     if (!this.socketStuff[code].playerSockets[name].includes(socket.id)) {
+                         this.socketStuff[code].playerSockets[name].push(socket.id);
+                     }
+                 }
                 
                 console.log('User ' + name + ' joined game ' + code + ' (phase: ' + gameState.getPhase() + ')');
                 
@@ -559,16 +620,18 @@ export class SocketHandlers {
                     // Get a unique question for each player
                     const questionObj = gameState.getNextQuestion();
                     if (questionObj) {
-                        // Send to specific player using their socket
+                        // Send to specific player using all their sockets (supports multiple devices)
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const playerSocketId = socketInfo.playerSockets[username];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c3SubmitTruth,
-                                text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                                question: questionObj.question,
-                                questionIndex: questionObj.index,
-                                instructionText: 'Please answer this question truthfully about yourself'
+                            const socketIds = socketInfo.playerSockets[username];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.c3SubmitTruth,
+                                    text: `Please truthfully answer this question:\n\n${questionObj.question}`,
+                                    question: questionObj.question,
+                                    questionIndex: questionObj.index,
+                                    instructionText: 'Please answer this question truthfully about yourself'
+                                });
                             });
                         }
                     }
@@ -622,31 +685,35 @@ export class SocketHandlers {
                             timerValue: 60
                         });
                         
-                        // Send lie prompt to all OTHER players
+                        // Send lie prompt to all OTHER players (to all their sockets)
                         userNames.forEach(username => {
                             if (username !== firstTarget) {
                                 // This player should submit a lie for firstTarget's question
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const playerSocketId = socketInfo.playerSockets[username];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c5SubmitLie,
-                                        text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
-                                        question: truth?.question || '',
-                                        targetPlayer: firstTarget,
-                                        instructionText: `Write a fooling answer for this question about ${firstTarget}`
+                                    const socketIds = socketInfo.playerSockets[username];
+                                    socketIds.forEach(socketId => {
+                                        this.io.to(socketId).emit('gameState', {
+                                            screen: Screens.c5SubmitLie,
+                                            text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
+                                            question: truth?.question || '',
+                                            targetPlayer: firstTarget,
+                                            instructionText: `Write a fooling answer for this question about ${firstTarget}`
+                                        });
                                     });
                                 }
                             }
                         });
                         
-                        // Send waiting to target player (they already answered truth)
+                        // Send waiting to target player (they already answered truth) - to all their sockets
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
-                            const playerSocketId = socketInfo.playerSockets[firstTarget];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                            const socketIds = socketInfo.playerSockets[firstTarget];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.c2WaitingScreenJustWhateverText,
+                                    text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                                });
                             });
                         }
                     }
@@ -721,30 +788,34 @@ export class SocketHandlers {
                         answers: shuffledAnswers
                     });
                     
-                    // Send voting to all players except target
+                    // Send voting to all players except target (to all their sockets)
                     userNames.forEach(username => {
                         if (username !== targetPlayer) {
                             const socketInfo = this.socketStuff[code];
                             if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                const playerSocketId = socketInfo.playerSockets[username];
-                                this.io.to(playerSocketId).emit('gameState', {
-                                    screen: Screens.c4PickTheBestAnswerOutOfAList,
-                                    text: 'Which one is the TRUTH about ' + targetPlayer + '?',
+                                const socketIds = socketInfo.playerSockets[username];
+                                socketIds.forEach(socketId => {
+                                    this.io.to(socketId).emit('gameState', {
+                                        screen: Screens.c4PickTheBestAnswerOutOfAList,
+                                        text: 'Which one is the TRUTH about ' + targetPlayer + '?',
                                         answers: shuffledAnswers
                                     });
-                                }
+                                });
                             }
-                        });
-                        
-                        // Send waiting to target player
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
-                            const playerSocketId = socketInfo.playerSockets[targetPlayer];
-                            this.io.to(playerSocketId).emit('gameState', {
+                        }
+                    });
+                    
+                    // Send waiting to target player (to all their sockets)
+                    const socketInfo = this.socketStuff[code];
+                    if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
+                        const socketIds = socketInfo.playerSockets[targetPlayer];
+                        socketIds.forEach(socketId => {
+                            this.io.to(socketId).emit('gameState', {
                                 screen: Screens.c2WaitingScreenJustWhateverText,
                                 text: 'Others are voting on your question!'
                             });
-                        }
+                        });
+                    }
                 } else {
                     // Send waiting to player
                     socket.emit('gameState', {
@@ -826,16 +897,18 @@ export class SocketHandlers {
                         answers: results
                     });
                     
-                    // Show results to all players
+                    // Show results to all players (to all their sockets)
                     const userNames = gameState.getUserNames();
                     userNames.forEach(username => {
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const playerSocketId = socketInfo.playerSockets[username];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.h3ShowTheLiesAndTruths,
-                                text: 'Results for ' + targetPlayer + '!',
-                                answers: results
+                            const socketIds = socketInfo.playerSockets[username];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.h3ShowTheLiesAndTruths,
+                                    text: 'Results for ' + targetPlayer + '!',
+                                    answers: results
+                                });
                             });
                         }
                     });
@@ -972,11 +1045,14 @@ export class SocketHandlers {
                     
                     userNames.forEach(username => {
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const playerSocketId = socketInfo.playerSockets[username];
-                            const socket = this.io.sockets.sockets.get(playerSocketId);
-                            if (socket) {
-                                this.sendPlayerToCorrectScreen(code, gameState, username, socket);
-                            }
+                            const socketIds = socketInfo.playerSockets[username];
+                            // Send to all sockets for this user
+                            socketIds.forEach(socketId => {
+                                const socket = this.io.sockets.sockets.get(socketId);
+                                if (socket) {
+                                    this.sendPlayerToCorrectScreen(code, gameState, username, socket);
+                                }
+                            });
                         }
                     });
                 } else {
@@ -1066,13 +1142,15 @@ export class SocketHandlers {
                             if (username !== firstTarget) {
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const playerSocketId = socketInfo.playerSockets[username];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c5SubmitLie,
-                                        text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
-                                        question: truth?.question || '',
-                                        targetPlayer: firstTarget,
-                                        instructionText: `Write a fooling answer for this question about ${firstTarget}`
+                                    const socketIds = socketInfo.playerSockets[username];
+                                    socketIds.forEach(socketId => {
+                                        this.io.to(socketId).emit('gameState', {
+                                            screen: Screens.c5SubmitLie,
+                                            text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
+                                            question: truth?.question || '',
+                                            targetPlayer: firstTarget,
+                                            instructionText: `Write a fooling answer for this question about ${firstTarget}`
+                                        });
                                     });
                                 }
                             }
@@ -1080,10 +1158,12 @@ export class SocketHandlers {
                         
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
-                            const playerSocketId = socketInfo.playerSockets[firstTarget];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                            const socketIds = socketInfo.playerSockets[firstTarget];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.c2WaitingScreenJustWhateverText,
+                                    text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                                });
                             });
                         }
                     }
@@ -1111,13 +1191,15 @@ export class SocketHandlers {
                             if (questionObj) {
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const playerSocketId = socketInfo.playerSockets[username];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c3SubmitTruth,
-                                        text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                                        question: questionObj.question,
-                                        questionIndex: questionObj.index,
-                                        instructionText: 'Please answer this question truthfully about yourself'
+                                    const socketIds = socketInfo.playerSockets[username];
+                                    socketIds.forEach(socketId => {
+                                        this.io.to(socketId).emit('gameState', {
+                                            screen: Screens.c3SubmitTruth,
+                                            text: `Please truthfully answer this question:\n\n${questionObj.question}`,
+                                            question: questionObj.question,
+                                            questionIndex: questionObj.index,
+                                            instructionText: 'Please answer this question truthfully about yourself'
+                                        });
                                     });
                                 }
                             }
@@ -1148,13 +1230,15 @@ export class SocketHandlers {
                             if (username !== firstTarget) {
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const playerSocketId = socketInfo.playerSockets[username];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c5SubmitLie,
-                                        text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
-                                        question: truth?.question || '',
-                                        targetPlayer: firstTarget,
-                                        instructionText: `Write a fooling answer for this question about ${firstTarget}`
+                                    const socketIds = socketInfo.playerSockets[username];
+                                    socketIds.forEach(socketId => {
+                                        this.io.to(socketId).emit('gameState', {
+                                            screen: Screens.c5SubmitLie,
+                                            text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + (truth?.question || ''),
+                                            question: truth?.question || '',
+                                            targetPlayer: firstTarget,
+                                            instructionText: `Write a fooling answer for this question about ${firstTarget}`
+                                        });
                                     });
                                 }
                             }
@@ -1162,10 +1246,12 @@ export class SocketHandlers {
                         
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
-                            const playerSocketId = socketInfo.playerSockets[firstTarget];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                            const socketIds = socketInfo.playerSockets[firstTarget];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.c2WaitingScreenJustWhateverText,
+                                    text: 'Your truth has been submitted! Now others will submit lies for your question.'
+                                });
                             });
                         }
                     }
@@ -1200,11 +1286,13 @@ export class SocketHandlers {
                         if (username !== targetPlayer) {
                             const socketInfo = this.socketStuff[code];
                             if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                const playerSocketId = socketInfo.playerSockets[username];
-                                this.io.to(playerSocketId).emit('gameState', {
-                                    screen: Screens.c4PickTheBestAnswerOutOfAList,
-                                    text: 'Which one is the TRUTH about ' + targetPlayer + '?',
-                                    answers: shuffledAnswers
+                                const socketIds = socketInfo.playerSockets[username];
+                                socketIds.forEach(socketId => {
+                                    this.io.to(socketId).emit('gameState', {
+                                        screen: Screens.c4PickTheBestAnswerOutOfAList,
+                                        text: 'Which one is the TRUTH about ' + targetPlayer + '?',
+                                        answers: shuffledAnswers
+                                    });
                                 });
                             }
                         }
@@ -1212,10 +1300,12 @@ export class SocketHandlers {
                     
                     const socketInfo = this.socketStuff[code];
                     if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
-                        const playerSocketId = socketInfo.playerSockets[targetPlayer];
-                        this.io.to(playerSocketId).emit('gameState', {
-                            screen: Screens.c2WaitingScreenJustWhateverText,
-                            text: 'Others are voting on your question!'
+                        const socketIds = socketInfo.playerSockets[targetPlayer];
+                        socketIds.forEach(socketId => {
+                            this.io.to(socketId).emit('gameState', {
+                                screen: Screens.c2WaitingScreenJustWhateverText,
+                                text: 'Others are voting on your question!'
+                            });
                         });
                     }
                 } else {
@@ -1256,13 +1346,15 @@ export class SocketHandlers {
                                     if (questionObj) {
                                         const socketInfo = this.socketStuff[code];
                                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                            const playerSocketId = socketInfo.playerSockets[username];
-                                            this.io.to(playerSocketId).emit('gameState', {
-                                                screen: Screens.c3SubmitTruth,
-                                                text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                                                question: questionObj.question,
-                                                questionIndex: questionObj.index,
-                                                instructionText: 'Please answer this question truthfully about yourself'
+                                            const socketIds = socketInfo.playerSockets[username];
+                                            socketIds.forEach(socketId => {
+                                                this.io.to(socketId).emit('gameState', {
+                                                    screen: Screens.c3SubmitTruth,
+                                                    text: `Please truthfully answer this question:\n\n${questionObj.question}`,
+                                                    question: questionObj.question,
+                                                    questionIndex: questionObj.index,
+                                                    instructionText: 'Please answer this question truthfully about yourself'
+                                                });
                                             });
                                         }
                                     }
@@ -1284,26 +1376,30 @@ export class SocketHandlers {
                                     timerValue: 60
                                 });
                                 
-                                // Send lie submission to next target
+                                // Send lie submission to next target (to all their sockets)
                                 const nextTruth = gameState.getTruthForPlayer(nextTargetPlayer);
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
-                                    const playerSocketId = socketInfo.playerSockets[nextTargetPlayer];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c5SubmitLie,
-                                        text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
-                                        question: nextTruth?.question,
-                                        instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
+                                    const socketIds = socketInfo.playerSockets[nextTargetPlayer];
+                                    socketIds.forEach(socketId => {
+                                        this.io.to(socketId).emit('gameState', {
+                                            screen: Screens.c5SubmitLie,
+                                            text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
+                                            question: nextTruth?.question,
+                                            instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
+                                        });
                                     });
                                 }
                                 
-                                // Send waiting to others
+                                // Send waiting to others (to all their sockets)
                                 userNames.forEach(username => {
                                     if (username !== nextTargetPlayer && socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                        const playerSocketId = socketInfo.playerSockets[username];
-                                        this.io.to(playerSocketId).emit('gameState', {
-                                            screen: Screens.c2WaitingScreenJustWhateverText,
-                                            text: nextTargetPlayer + ' is writing a lie! Wait for your turn...'
+                                        const socketIds = socketInfo.playerSockets[username];
+                                        socketIds.forEach(socketId => {
+                                            this.io.to(socketId).emit('gameState', {
+                                                screen: Screens.c2WaitingScreenJustWhateverText,
+                                                text: nextTargetPlayer + ' is writing a lie! Wait for your turn...'
+                                            });
                                         });
                                     }
                                 });
@@ -1342,11 +1438,13 @@ export class SocketHandlers {
                             if (username !== targetPlayer) {
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const playerSocketId = socketInfo.playerSockets[username];
-                                    this.io.to(playerSocketId).emit('gameState', {
-                                        screen: Screens.c4PickTheBestAnswerOutOfAList,
-                                        text: 'Which one is the TRUTH about ' + targetPlayer + '?',
-                                        answers: shuffledAnswers
+                                    const socketIds = socketInfo.playerSockets[username];
+                                    socketIds.forEach(socketId => {
+                                        this.io.to(socketId).emit('gameState', {
+                                            screen: Screens.c4PickTheBestAnswerOutOfAList,
+                                            text: 'Which one is the TRUTH about ' + targetPlayer + '?',
+                                            answers: shuffledAnswers
+                                        });
                                     });
                                 }
                             }
@@ -1354,10 +1452,12 @@ export class SocketHandlers {
                         
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
-                            const playerSocketId = socketInfo.playerSockets[targetPlayer];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Others are voting on your question!'
+                            const socketIds = socketInfo.playerSockets[targetPlayer];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.c2WaitingScreenJustWhateverText,
+                                    text: 'Others are voting on your question!'
+                                });
                             });
                         }
                     }
@@ -1406,11 +1506,13 @@ export class SocketHandlers {
                     userNames.forEach(username => {
                         const socketInfo = this.socketStuff[code];
                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const playerSocketId = socketInfo.playerSockets[username];
-                            this.io.to(playerSocketId).emit('gameState', {
-                                screen: Screens.h3ShowTheLiesAndTruths,
-                                text: 'Results for ' + targetPlayer + '!',
-                                answers: results
+                            const socketIds = socketInfo.playerSockets[username];
+                            socketIds.forEach(socketId => {
+                                this.io.to(socketId).emit('gameState', {
+                                    screen: Screens.h3ShowTheLiesAndTruths,
+                                    text: 'Results for ' + targetPlayer + '!',
+                                    answers: results
+                                });
                             });
                         }
                     });
@@ -1460,11 +1562,13 @@ export class SocketHandlers {
                         userNames.forEach(username => {
                             const socketInfo = this.socketStuff[code];
                             if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                const playerSocketId = socketInfo.playerSockets[username];
-                                this.io.to(playerSocketId).emit('gameState', {
-                                    screen: Screens.h3ShowTheLiesAndTruths,
-                                    text: 'Results for ' + targetPlayer + '!',
-                                    answers: results
+                                const socketIds = socketInfo.playerSockets[username];
+                                socketIds.forEach(socketId => {
+                                    this.io.to(socketId).emit('gameState', {
+                                        screen: Screens.h3ShowTheLiesAndTruths,
+                                        text: 'Results for ' + targetPlayer + '!',
+                                        answers: results
+                                    });
                                 });
                             }
                         });
@@ -1504,13 +1608,15 @@ export class SocketHandlers {
                                         if (username !== nextTarget) {
                                             const socketInfo = this.socketStuff[code];
                                             if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                                const playerSocketId = socketInfo.playerSockets[username];
-                                                this.io.to(playerSocketId).emit('gameState', {
-                                                    screen: Screens.c5SubmitLie,
-                                                    text: 'Write a LIE for ' + nextTarget + '!',
-                                                    question: nextTruth?.question || '',
-                                                    targetPlayer: nextTarget,
-                                                    instructionText: `Write a fooling answer for this question about ${nextTarget}`
+                                                const socketIds = socketInfo.playerSockets[username];
+                                                socketIds.forEach(socketId => {
+                                                    this.io.to(socketId).emit('gameState', {
+                                                        screen: Screens.c5SubmitLie,
+                                                        text: 'Write a LIE for ' + nextTarget + '!',
+                                                        question: nextTruth?.question || '',
+                                                        targetPlayer: nextTarget,
+                                                        instructionText: `Write a fooling answer for this question about ${nextTarget}`
+                                                    });
                                                 });
                                             }
                                         }

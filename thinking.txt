@@ -87,3 +87,209 @@ I want to finish making the current question answering screen work, and then I w
 
 I have a strategy of saving the client state by using a hashtag to give an id to each client and then I can use local or local storage.
 
+
+03/14/2026
+At the end of entering lies, the system doesn't progress automatically before the counter runs out.
+
+The leaderboard still goes way too fast.  So just add a button and don't let it proceed until the host clicks continue.
+
+Oh, I didn't pull yet.
+
+---
+
+At the final standings the start new game button throws up a new game code, instead it should go to the screen that offers hosting a new game or joining a different game, otherwise everyone hits the same button and they all become hosts. [Not fixed]
+
+When all the lies are in, it still waits for the timer to be done. [x]
+
+Change the screen that shows who voted for what to wait to proceed until the host clicks continue. [not yet][Perhaps the button is there but change the timer for this screen to a minute.]
+
+Do the same for the scores page. [This has a continue button but the timer still advances.  Change it to like a full minute]
+
+On the who voted for what, make the text light because the background is dark. [not yet]
+
+On the score board, make the background dark because the text is light. [x]
+
+-
+
+All fixes pushed to main:
+
+1. **Start new game button** - Now reloads page instead of creating new game, preventing all players from becoming hosts
+
+2. **All lies in timing** - Now proceeds immediately instead of waiting for 4 second delay
+
+3. **Results screen continue** - Added Continue button that only shows for host (after all revealed)
+
+4. **Scores screen continue** - Added Continue button that only shows for host, with dark background styling
+
+5. **Results text color** - Changed "Voted by" and "No one guessed" text to dark (#333)
+
+6. **Scoreboard background** - Changed to dark theme (dark background, light text)
+
+7. **Removed auto-continue** - After voting results, game now waits for host to click Continue instead of auto-advancing after timer
+
+---
+
+We tried to fix this:
+- At the final standings the start new game button throws up a new game code, instead it should go to the screen that offers hosting a new game or joining a different game, otherwise everyone hits the same button and they all become hosts. [Not fixed]
+[x] However the Start New Game button just refreshes the page and thus does nothing.  It needs to go to the page where a new game can be created or joined.
+
+We tried to fix this:
+Change the screen that shows who voted for what to wait to proceed until the host clicks continue. [not yet]
+|
+[not yet] Can't tell what is going on because the screen advances so fast I can't see anything.  Make the timer for continuing from this screen after everything is shown to be a full minute.
+
+Do the same for the scores page. [not fixed]
+|
+[x] There is now a continue button but the timer still advances too fast.  Make this timer a full minute as well.
+
+On the who voted for what, make the text light because the background is dark. [not yet]
+|
+[x] This has not been changed.
+
+[x] Change the results screen showing Final Standings to have a dark background for the light text to match the correction for the leader board which is shown each round.
+
+-
+
+All fixes pushed:
+
+Start New Game button - Now navigates to the game entry screen via hash change instead of just refreshing
+
+Results screen ("Who voted for what") - Added dark theme, light text colors, and 60-second countdown timer with "Auto-continue in X seconds" display
+
+Scores page - Added 60-second countdown timer with display
+
+Results text color - Changed to light colors (#fff, #ccc) for dark background
+
+Final standings - Changed to dark theme to match round leaderboard (dark background, light text)
+
+The Start New Game button now uses window.location.hash = '#new' and App.tsx listens for hash changes to navigate to the G1NewGamePage screen.
+
+---
+
+I started a new game and gave the users different names.  But then they were not able to submit their lie.  I think names from a previous game got sucked into it.
+
+We tried to fix this:
+Change the screen that shows who voted for what to wait to proceed until the host clicks continue. [not yet]
+|
+Can't tell what is going on because the screen advances so fast I can't see anything.  Make the timer for continuing from this screen after everything is shown to be a full minute.
+|
+[x] This is still not corrected.  It does drummroll, and then shows one by one who voted for what and then immediately flips to the leaderboard instead of waiting for the host to achnoledge the screen.  I can't debug this screen because it goes too fast.
+
+If no one puts a lie in or an answer in, instead of trying to continue, go ahead and restart the round instead o letting the game get jammed up.
+
+-
+
+Pushed fixes:
+
+1. **Names persisting from previous game** - Now clears localStorage state when clicking "Start New Game" to prevent old names being used
+
+2. **Results screen auto-advancing** - Removed the automatic 5-second timeout after showing results. The screen now waits for the host to click Continue. There's still a 60-second countdown timer that auto-continues if the host doesn't click.
+
+3. **No submissions handling** - Added logic to restart the round if:
+   - No answers are submitted during the truth phase
+   - No lies are submitted for the first player during lie phase
+
+The game should now stay on the results screen until the host clicks Continue, making it much easier to debug and see what's happening.
+
+---
+
+A user should not be presented their own lie for voating on.  Otherwise they could give themselves points.
+
+When it went to the second lie not all the players who were supposed to be able to submit a lie were given a box to put an answer in.  Then when the timer hit zero, without putting a like in the second player for player one the lie box then went over to player 3.  Then when the voting happened, only player 2 needed to enter something.
+
+When the host refreshes it resets the counter.  Is the counter on the client side and thus the host?
+
+I think I need to fix this myself.
+
+During the drum roll phase the screen is half width.
+
+The start button should not be enabled on the host until at least 2 players have joined the game
+
+Remove the next round and end game buttons on the panel showing the leader board during the game.  We don't need people accidentally killing the game.
+
+Instruction text is too big.
+
+---
+
+Here are the things I will forward on to the agent.
+
+[x] A user should not be presented their own lie for voating on.  Otherwise they could give themselves points.
+
+During the drum roll phase the screen is half width.
+|
+Try try again.
+
+[x] The start button should not be enabled on the host until at least 2 players have joined the game
+
+[x] Remove the next round and end game buttons on the panel showing the leader board during the game.  We don't need people accidentally killing the game.
+
+[x] Instruction text is too big on at least turth answering page.
+
+-
+
+Done! Fixed all 5 issues:
+
+1. **Filter user's own lie from voting** - Users can no longer vote for their own answer in C4PickBestAnswer.tsx (prevents self-scoring)
+
+2. **Fix drum roll CSS** - Made H3ShowLiesAndTruths full width by adding `width: '100%', maxWidth: 'none'` to containerStyle
+
+3. **Start button validation** - H1CollectingUsersPage now disables Start button until 2+ players join, shows helpful message
+
+4. **Remove Next/End Game buttons from non-hosts** - H5ShowPoints now wraps Next Round/End Game buttons in `{isHost && ...}` so only host sees them
+
+5. **Reduce instruction text size** - Changed h1 font-size from default (~2.5rem) to 1.5rem on both C3SubmitTruth and C5SubmitLie pages
+
+---
+
+Remove Next Round and End Game from leaderboard of host as well.
+
+The answers need to be shuffled during the guessing phase before displayed on the host and then on the clients otherwise you can tell which one is correct because who submitted it.  Or sort it.
+
+The drum roll phase is still half width, it does correct one the continue button shows up.  Is that a clue what is going on?
+
+-
+
+Done! Fixed all 3 issues:
+
+1. **Remove Next Round/End Game buttons** - Completely removed from H5ShowPoints leaderboard (no one sees them now, game auto-continues)
+
+2. **Shuffle voting answers** - Added shuffled answers to all three places where host gets the timer screen during voting phase (lines ~672, ~1143, ~1284). Also shuffled results order during reveal phase (line ~1348)
+
+3. **Fix drum roll CSS** - Changed H3 container to use `width: 100vw` with `marginLeft/Right: calc(50% - 50vw)` to override the `.App` constraint of 900px max-width. The reason it worked after continue was because the countdown button appeared in a different element that wasn't constrained.
+
+---
+
+[x] Now the drum roll screen is half off the left side of the screen.  Need to just remove all css and other layout for it and just start over.
+
+[x] The correct answer always seems to be the bottom option.
+
+[x] The drum rool screen now works, but it is exactly the right width which is inconsistent with the rest of the screens, but I am not going to fuss with it now.
+
+The name of the submitter is on the drumroll screen which gives away if it is the truth or lie.  So it needs to be removed.
+
+-
+
+Done - removed the username display from the drumroll results screen. Now it just shows the answer text without revealing who submitted it.
+
+---
+
+Add a QR code to the host's join game screen that will connect a user to the right host name and populate the code and drop them into where they are putting in their name and seelcting an emoji.
+
+In the drum roll screen, it should show the answer or lie before it is shown as a lie or truth.
+
+[x] When putting in the lies for the second round, some reason only one person had to answer and then it went to the selection and then there were answers in from the previous round.
+
+---
+
+I am not really happy with the drum roll screen.  It should show the correct answer last.  It should show the answers one at a time.
+
+Add a QR code to the host's join game screen that will connect a user to the right host name and populate the code and drop them into where they are putting in their name and seelcting an emoji.
+
+
+I fixed the issue with case sensitivity,
+
+Fixed it so that the lie timer is the same timer as the answer timer.
+
+Fixed it so that if someone doesn't answer the game still progresses.
+
+I was trying to figure out why the game flaked out at the end, something that happened before it did that is someone's phone was on the wrong screen.  I was finally able to get screens on different modes all at the same time and then the backend crashed, so I gave the crash code to open-hands and by the time you read this it probably commited a possible fix.  So check if the code at least doesn't look damaging and then try to flake it out again.
