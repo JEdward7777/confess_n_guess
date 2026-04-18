@@ -53,9 +53,12 @@ class SocketHandlers {
     }
     sendToHost(gameCode, data) {
         const socketInfo = this.socketStuff[gameCode];
-        console.log('sendToHost called:', { gameCode, hasSocketInfo: !!socketInfo, hostSocketId: socketInfo === null || socketInfo === void 0 ? void 0 : socketInfo.hostSocketId, screen: data.screen });
-        if (socketInfo && socketInfo.hostSocketId) {
-            this.io.to(socketInfo.hostSocketId).emit('gameState', data);
+        console.log('sendToHost called:', { gameCode, hasSocketInfo: !!socketInfo, hostSocketIds: socketInfo === null || socketInfo === void 0 ? void 0 : socketInfo.hostSocketIds, screen: data.screen });
+        if (socketInfo && socketInfo.hostSocketIds && socketInfo.hostSocketIds.length > 0) {
+            // Send to all host sockets
+            socketInfo.hostSocketIds.forEach(socketId => {
+                this.io.to(socketId).emit('gameState', data);
+            });
         }
         else {
             console.log('WARNING: sendToHost no host socket found for game', gameCode);
@@ -63,9 +66,13 @@ class SocketHandlers {
     }
     sendToPlayers(gameCode, data) {
         const socketInfo = this.socketStuff[gameCode];
-        if (socketInfo && socketInfo.hostSocketId) {
-            // Send to all except host
-            this.io.in(gameCode).except(socketInfo.hostSocketId).emit('gameState', data);
+        if (socketInfo && socketInfo.hostSocketIds && socketInfo.hostSocketIds.length > 0) {
+            // Send to all except host sockets - use except for each host socket
+            const room = this.io.in(gameCode);
+            socketInfo.hostSocketIds.forEach(hostSocketId => {
+                room.except(hostSocketId);
+            });
+            room.emit('gameState', data);
         }
         else {
             // Fallback: send to everyone
@@ -356,10 +363,11 @@ class SocketHandlers {
             // IMPORTANT: Do NOT remove player from game state - only clean up socket connections
             for (const code in this.socketStuff) {
                 const socketInfo = this.socketStuff[code];
-                // Check if this was the host socket
-                if (socketInfo.hostSocketId === socket.id) {
-                    socketInfo.hostSocketId = undefined;
-                    console.log('Host disconnected from game ' + code);
+                // Check if this was a host socket and remove from the list
+                const hostIndex = socketInfo.hostSocketIds.indexOf(socket.id);
+                if (hostIndex > -1) {
+                    socketInfo.hostSocketIds.splice(hostIndex, 1);
+                    console.log('Host socket removed from game ' + code);
                 }
                 // Remove this socket from all players' socket arrays
                 for (const username in socketInfo.playerSockets) {
@@ -383,9 +391,9 @@ class SocketHandlers {
             // Add host as a user
             gameState.addUser('<host>', '🏠');
             this.games[code] = gameState;
-            // Track host socket ID and player sockets
+            // Track host socket IDs (as list) and player sockets
             this.socketStuff[code] = {
-                hostSocketId: socket.id,
+                hostSocketIds: [socket.id],
                 playerSockets: {}
             };
             // Join the socket to the game room
@@ -406,7 +414,7 @@ class SocketHandlers {
                 socket.join(code);
                 // Initialize socket tracking if not exists (for loaded games)
                 if (!this.socketStuff[code]) {
-                    this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+                    this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
                 }
                 socket.emit('gameState', {
                     sharedState: gameState.getSharedState(),
@@ -434,10 +442,13 @@ class SocketHandlers {
             code = normalizeCode(code);
             // Initialize socket tracking if not exists
             if (!this.socketStuff[code]) {
-                this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+                this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
             }
             if (role === 'host') {
-                this.socketStuff[code].hostSocketId = socket.id;
+                // Only add if not already present in the list
+                if (!this.socketStuff[code].hostSocketIds.includes(socket.id)) {
+                    this.socketStuff[code].hostSocketIds.push(socket.id);
+                }
                 console.log('>>> HOST IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
             }
             else if (role === 'player' && name) {
@@ -457,7 +468,7 @@ class SocketHandlers {
             if (gameState) {
                 // Initialize socket tracking if not exists (for loaded games)
                 if (!this.socketStuff[code]) {
-                    this.socketStuff[code] = { hostSocketId: undefined, playerSockets: {} };
+                    this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
                 }
                 // If user already exists, KEEP their state and just add new socket connection
                 // This preserves their game state (points, answers, lies, etc.) on reconnection

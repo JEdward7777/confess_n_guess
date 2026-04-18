@@ -43,11 +43,7 @@ function App() {
     function onIdentifyMe() {
       const code = gameStateRef.current?.sharedState?.code;
       const name = gameStateRef.current?.name;
-      const isHost = name === '<host>' || gameStateRef.current?.screen === Screens.h1CollectingUsers || 
-                     gameStateRef.current?.screen === Screens.h2InformationScreenWithTimer ||
-                     gameStateRef.current?.screen === Screens.h3ShowTheLiesAndTruths ||
-                     gameStateRef.current?.screen === Screens.h5ShowThePointsForTheRound ||
-                     gameStateRef.current?.screen === Screens.h6ShowTheWinner;
+      const isHost = name === '<host>';
       
       if (code) {
         console.log('>>> IDENTIFYING as ' + (isHost ? 'host' : 'player') + ' for game ' + code);
