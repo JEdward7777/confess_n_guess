@@ -3,77 +3,44 @@
 Ordered. Top of "Now" is what to pick up next. Each task names the issues it closes.
 See `ISSUES.md` for detail, `README.md` for the verification protocol.
 
-Nothing here has been started — this queue was written alongside the 2026-07-15 sweep.
+Written alongside the 2026-07-15 sweep; five tasks landed the same day (see Done).
+
+## Done
+
+- **T1** — host no longer receives player-only screens (CNG-001). `06ccaa6`
+- **T2** — reconnect resyncs from the server (CNG-005, -007, -018, -024). `0049ce8`
+- **T4** — lie round un-inverted in the skip path (CNG-004, part of -014). `808f39d`
+- **T5** — full state serialization + idle sweep (CNG-002, -016). `c494f4c`
+- **T13** — assigned questions stored server-side (CNG-006). `318dae1`
+
+Every one was verified against a running server, not just compiled. Scripts live in
+the session scratchpad and should be folded into T8.
 
 ## Now
-
-### T1 — Stop the host screen turning into a player screen
-Closes **CNG-001**. `src/socketHandlers.ts:89-102`.
-
-One-line fix: `except()` returns a new operator instead of mutating, so the current
-`forEach` discards every exclusion. Pass the array in a single chained call. Cheapest
-real fix in the register and it kills a reported symptom outright.
-
-Verify: play to the end of a game and watch the host — it must stay on the winner
-screen, not fall through to "Waiting...".
-
-### T2 — Make reconnect resync from the server
-Closes **CNG-005**, most of **CNG-007**.
-
-At the end of the `identify` handler, call `sendPlayerToCorrectScreen` /
-`sendHostToCorrectScreen`. The server already treats that function as "the single
-source of truth for where a player should be" — the reconnect path just never calls
-it. Then fix `App.tsx:36` to route `name === '<host>'` to the host screen instead of
-the player name-entry screen, and stop trusting `localStorage` for anything the
-server can answer.
-
-Verify: refresh a player mid-lie-round and mid-vote; refresh the host on every
-screen. Everyone lands where the game actually is. Try it once with localStorage
-cleared.
 
 ### T3 — Give the server the timer back
 Closes **CNG-003**, **CNG-011**; retires half of **CNG-022**.
 
-`GameState.startTimer` already exists and is never called. Move the countdown
-authority server-side and reduce the client's `timerExpired` to advisory (or drop it).
-While here, delete the two nested blind `setTimeout`s at `:1588-1653` — a deferred
-transition must re-check the phase it was scheduled for before acting.
+The last of the five original criticals, and the only one left that can still wreck a
+live round.
 
-If a full move is too big for one pass, the interim fix is to give `timerExpired` a
-phase/round token and reject any that doesn't match the current one. That alone stops
-the cascade.
+`GameState.startTimer` already exists and is never called — the authoritative
+countdown runs in the *host's browser*. Two host tabs means two countdowns, and
+`timerExpired`'s guard admits three phases at once, so two events in a row punch
+through into the next phase: the round either restarts or a player is skipped, with
+nobody having typed anything. Note the previous agent's socket-list change is what
+made two live host sockets possible, so this is reachable today.
 
-Verify: open the host on two tabs and let a timer run out. The round must advance
+Move the countdown server-side and reduce the client's `timerExpired` to advisory (or
+drop it). While here, delete the two nested blind `setTimeout`s at `:1588-1653` — they
+advance the game without re-checking the phase, so they race the host's Continue
+button and can skip a whole round (CNG-011).
+
+Interim fix if a full move is too big for one pass: give `timerExpired` a phase/round
+token and reject any that doesn't match. That alone stops the cascade.
+
+Verify: open the host on two tabs and let a timer run out — the round must advance
 once. Today it restarts the round or skips a player.
-
-### T4 — Fix the inverted lie round
-Closes **CNG-004**. `src/socketHandlers.ts:1382-1416`.
-
-Target and non-targets are swapped in this one path. Small fix, but do it as part of
-T6 if T6 happens first — the reason it's wrong is that it's a hand-copy that drifted.
-
-Verify: let the lie timer expire with no lies on a non-first target.
-
-### T5 — Persist the whole game
-Closes **CNG-002**, **CNG-016**.
-
-`toJSON` drops `userAnswers`, `lies`, `votes`, `currentLieTargetPlayer`, so every
-saved game reloads into a state the code can't handle.
-
-**Decided 2026-07-15 (user):** full serialization. Mid-game state must survive a
-restart, because the workflow is *hot-patching code in the middle of a live game* —
-restarting must not force replaying the trace from the beginning. This is a real
-requirement, not incidental, so resume has to be correct rather than best-effort.
-Recorded in `/CLAUDE.md`.
-
-So: serialize everything a round needs, version the file, and discard entries whose
-version doesn't match rather than loading them into a shape the code no longer
-expects. Add `lastActivity` and sweep old games. Delete the current 37 (all written
-by the broken `toJSON`, none resumable). Gitignore `games.json` — this does *not*
-stop it saving, it only keeps churn out of commits.
-
-Verify: restart the server mid-round and have everyone reconnect — the round must
-carry on, not restart.
 
 ## Next
 
@@ -113,11 +80,8 @@ is why regressions keep landing.
 ## Backlog
 
 - **T9** — Remove or gate `killServer` (**CNG-015**). Any client can kill the process.
-- **T10** — Identify on `connect` rather than waiting for `identifyMe` (**CNG-018**).
 - **T11** — Fix H5 auto-continue re-arming (**CNG-017**).
 - **T12** — Clear `userAnswers` and `usedQuestionIndexes` on `startGame` (**CNG-010**).
-- **T13** — Store each player's assigned question server-side (**CNG-006**). Folds
-  naturally into T7 — it's the same "server should know, not ask the client" fix.
 
 ## Absorbed from todo.txt
 
@@ -125,10 +89,10 @@ is why regressions keep landing.
 
 | todo.txt line | Now |
 |---|---|
-| "if you refresh your screen, you don't lose your location" | T2 / CNG-005 |
-| "if a gave has no activity for enough time that it gets deleted" | T5 / CNG-016 |
+| "if you refresh your screen, you don't lose your location" | **Done** — T2 / CNG-005 |
+| "if a gave has no activity for enough time that it gets deleted" | **Done** — T5 / CNG-016 |
 | "if you create a username that already exists that it fusses" / "replace that user so that it is possible to get back into the game" | T7 / CNG-008 |
-| "Fix the control c thing which is bypassing the state of the game being saved" | Partly done (SIGINT handler at `index.ts:32`), but what it saves is incomplete — T5 / CNG-002 |
+| "Fix the control c thing which is bypassing the state of the game being saved" | **Done** — the SIGINT handler existed but saved an incomplete state; T5 / CNG-002 |
 
-The rest of `todo.txt` appears complete. Suggest deleting it once T2/T5/T7 land, so
-there's one place to look.
+The rest of `todo.txt` appears complete. Only the CNG-008 line is still live; delete
+`todo.txt` once T7 lands, so there's one place to look.
