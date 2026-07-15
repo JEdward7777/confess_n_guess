@@ -3,6 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocketHandlers = void 0;
 const GameState_1 = require("./GameState");
 const IncludeStuff_1 = require("./IncludeStuff");
+// Seconds on the clock for a normal round, and for one being restarted after nobody
+// took part (shorter, because the players are evidently already there and waiting).
+const ROUND_SECONDS = 60;
+const RESTART_SECONDS = 30;
 // Normalize game code to uppercase for case-insensitive matching
 function normalizeCode(code) {
     var _a;
@@ -26,12 +30,6 @@ class SocketHandlers {
     generateGameCode() {
         const charactersToUse = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         return Array.from({ length: 5 }, () => charactersToUse.charAt(Math.floor(Math.random() * charactersToUse.length))).join('');
-    }
-    sendToRoom(gameCode, event, data) {
-        this.io.to(gameCode).emit(event, data);
-    }
-    sendToSocket(socketId, event, data) {
-        this.io.to(socketId).emit(event, data);
     }
     /**
      * Send a message to all sockets for a specific user.
@@ -91,20 +89,6 @@ class SocketHandlers {
             // Fallback: send to everyone
             this.io.to(gameCode).emit('gameState', data);
         }
-    }
-    getClientState(gameState, name = '', screen) {
-        const state = {
-            sharedState: gameState.getSharedState(),
-            name,
-            emoji: '',
-            screen: screen,
-            error: '',
-            text: ''
-        };
-        if (name && gameState.getSharedState().users[name]) {
-            state.emoji = gameState.getSharedState().users[name].emoji;
-        }
-        return state;
     }
     getHostScreen(gameState) {
         switch (gameState.getPhase()) {
@@ -236,7 +220,6 @@ class SocketHandlers {
      * @param customTarget Optional override for target player (used when transitioning between lie rounds)
      */
     sendPlayerToCorrectScreen(code, gameState, playerName, socket, customTarget) {
-        var _a, _b;
         const phase = gameState.getPhase();
         // Use custom target if provided, otherwise use game state
         const targetPlayer = customTarget || gameState.getCurrentLieTargetPlayer();
@@ -260,8 +243,7 @@ class SocketHandlers {
                 break;
             case GameState_1.GamePhase.AnsweringQuestions:
                 // Check if user already answered
-                const userAnswers = gameState['userAnswers'];
-                if (userAnswers && userAnswers[playerName]) {
+                if (gameState.getTruthForPlayer(playerName)) {
                     screenToSend = IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText;
                     textToSend = 'Your answer has been submitted! Please wait for others...';
                 }
@@ -282,8 +264,9 @@ class SocketHandlers {
                 }
                 else {
                     const truth = gameState.getTruthForPlayer(targetPlayer || '');
-                    const userLies = gameState['lies'];
-                    if (userLies && ((_a = userLies[targetPlayer]) === null || _a === void 0 ? void 0 : _a.some((l) => l.username === playerName))) {
+                    const alreadyLied = gameState.getLiesForPlayer(targetPlayer || '')
+                        .some(l => l.username === playerName);
+                    if (alreadyLied) {
                         screenToSend = IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText;
                         textToSend = 'Your lie has been submitted! Please wait for others...';
                     }
@@ -296,14 +279,15 @@ class SocketHandlers {
                 }
                 break;
             case GameState_1.GamePhase.VotingOnLies:
-                const userVotes = gameState['votes'];
+                const alreadyVoted = gameState.getVotesForPlayer(targetPlayer || '')
+                    .some(v => v.voter === playerName);
                 if (targetPlayer === playerName) {
                     // The round is about them - they know the answer and must not vote.
                     // Every other path excludes the target here; this one didn't (CNG-024).
                     screenToSend = IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText;
                     textToSend = 'Others are voting on your question!';
                 }
-                else if (userVotes && ((_b = userVotes[targetPlayer]) === null || _b === void 0 ? void 0 : _b.some((v) => v.voter === playerName))) {
+                else if (alreadyVoted) {
                     screenToSend = IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText;
                     textToSend = 'Your vote has been submitted! Please wait for others...';
                 }
@@ -374,6 +358,175 @@ class SocketHandlers {
             emitState.targetPlayer = targetPlayer;
         }
         socket.emit('gameState', emitState);
+    }
+    // === PHASE TRANSITIONS ===
+    //
+    // One method per transition. Each was previously written out two or three times by
+    // hand at the call sites, and the copies had drifted: one shuffled the reveal and
+    // another didn't, one asked the target to lie about themselves (CNG-004), one
+    // forgot to reset the round (CNG-025), several omitted targetPlayer (CNG-014).
+    // Every one of those was a single copy falling out of step with its siblings.
+    // Change behaviour here, once, and every path gets it. (CNG-023)
+    /** truth + lies for a target, with who voted for each. */
+    buildResults(gameState, targetPlayer) {
+        const truth = gameState.getTruthForPlayer(targetPlayer);
+        const lies = gameState.getLiesForPlayer(targetPlayer);
+        const votes = gameState.getVotesForPlayer(targetPlayer);
+        const voters = {};
+        votes.forEach(v => {
+            if (!voters[v.selectedUsername])
+                voters[v.selectedUsername] = [];
+            voters[v.selectedUsername].push(v.voter);
+        });
+        return [
+            { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
+            ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
+        ].map(a => ({ ...a, voters: voters[a.username] || [] }));
+    }
+    /**
+     * Start the answering round: every player gets their own question.
+     * Assigning here (rather than at the call site) is what keeps each player's question
+     * recorded server-side - see CNG-006.
+     */
+    beginAnsweringRound(code, gameState, hostText, seconds) {
+        gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
+        gameState.setTimerValue(seconds);
+        this.sendToHost(code, {
+            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
+            text: hostText,
+            timerValue: seconds
+        });
+        gameState.getUserNames().forEach(username => {
+            const questionObj = gameState.assignQuestion(username);
+            if (!questionObj)
+                return;
+            this.sendToUserSockets(code, username, 'gameState', {
+                screen: IncludeStuff_1.Screens.c3SubmitTruth,
+                text: `Please truthfully answer this question:\n\n${questionObj.question}`,
+                question: questionObj.question,
+                questionIndex: questionObj.index,
+                instructionText: 'Please answer this question truthfully about yourself'
+            });
+        });
+    }
+    /** Throw the round away and start it over from scratch. */
+    restartRound(code, gameState, hostText) {
+        gameState.clearAnswers();
+        // Must also reset the lie round pointer and drop the abandoned round's lies and
+        // votes, or the "fresh" round resumes mid-list (CNG-025).
+        gameState.resetLieData();
+        this.beginAnsweringRound(code, gameState, hostText, RESTART_SECONDS);
+    }
+    /** Everyone except the target writes a lie about the target; the target waits. */
+    beginLieRound(code, gameState, targetPlayer) {
+        gameState.setCurrentLieTargetPlayer(targetPlayer);
+        gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
+        gameState.setTimerValue(ROUND_SECONDS);
+        const truth = gameState.getTruthForPlayer(targetPlayer);
+        this.sendToHost(code, {
+            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
+            text: 'Now submitting lies for ' + targetPlayer + '!',
+            timerValue: ROUND_SECONDS
+        });
+        gameState.getUserNames().forEach(username => {
+            if (username === targetPlayer) {
+                this.sendToUserSockets(code, username, 'gameState', {
+                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+                    text: 'Your truth has been submitted! Now others will submit lies for your question.',
+                    targetPlayer
+                });
+            }
+            else {
+                this.sendToUserSockets(code, username, 'gameState', {
+                    screen: IncludeStuff_1.Screens.c5SubmitLie,
+                    text: 'Write a LIE for this question about ' + targetPlayer + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
+                    question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
+                    targetPlayer,
+                    instructionText: `Write a fooling answer for this question about ${targetPlayer}`
+                });
+            }
+        });
+    }
+    /** Everyone except the target votes on the shuffled truth+lies; the target waits. */
+    beginVoting(code, gameState, targetPlayer) {
+        gameState.setPhase(GameState_1.GamePhase.VotingOnLies);
+        gameState.setTimerValue(ROUND_SECONDS);
+        const truth = gameState.getTruthForPlayer(targetPlayer);
+        const lies = gameState.getLiesForPlayer(targetPlayer);
+        // Shuffled so the truth isn't always in the same position.
+        const answers = shuffleArray([
+            { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
+            ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
+        ]);
+        this.sendToHost(code, {
+            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
+            text: 'Voting on lies for ' + targetPlayer + '!',
+            timerValue: ROUND_SECONDS,
+            answers
+        });
+        gameState.getUserNames().forEach(username => {
+            if (username === targetPlayer) {
+                this.sendToUserSockets(code, username, 'gameState', {
+                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+                    text: 'Others are voting on your question!',
+                    targetPlayer
+                });
+            }
+            else {
+                this.sendToUserSockets(code, username, 'gameState', {
+                    screen: IncludeStuff_1.Screens.c4PickTheBestAnswerOutOfAList,
+                    text: 'Which one is the TRUTH about ' + targetPlayer + '?',
+                    answers,
+                    // Carry it explicitly. The old emits left the client merging whatever
+                    // targetPlayer happened to still be in its state (CNG-014).
+                    targetPlayer
+                });
+            }
+        });
+    }
+    /**
+     * Award points and reveal. Stops here deliberately - the host drives what happens
+     * next, via continueFromResults. The timeout path used to auto-advance from here on
+     * a blind timer and race the host (CNG-011).
+     */
+    showLieResults(code, gameState, targetPlayer) {
+        gameState.calculateLiePoints(targetPlayer);
+        gameState.setPhase(GameState_1.GamePhase.ShowingLieResults);
+        // Not shuffled: H3 sorts these itself (lies first, truth last) for the reveal, so
+        // one of the old copies shuffling and the other not made no visible difference -
+        // it just made the two look meaningfully different when they weren't.
+        const state = {
+            screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
+            text: 'Results for ' + targetPlayer + '!',
+            answers: this.buildResults(gameState, targetPlayer),
+            targetPlayer
+        };
+        this.sendToHost(code, state);
+        gameState.getUserNames().forEach(username => this.sendToUserSockets(code, username, 'gameState', state));
+    }
+    /** Move to the next player's lie round, or end the game if there are none left. */
+    advanceToNextLieRoundOrEnd(code, gameState) {
+        const next = gameState.getNextLieTargetPlayerSkippingMissing();
+        if (next) {
+            this.beginLieRound(code, gameState, next);
+        }
+        else {
+            this.endGameShowingWinner(code, gameState);
+        }
+    }
+    endGameShowingWinner(code, gameState) {
+        gameState.setPhase(GameState_1.GamePhase.GameOver);
+        const leaderboard = gameState.getLeaderboard();
+        const winner = leaderboard[0];
+        const state = {
+            screen: IncludeStuff_1.Screens.h6ShowTheWinner,
+            // The old copy in the timeout path read winner.name unguarded and would throw
+            // on an empty leaderboard.
+            text: winner ? `Winner: ${winner.name} with ${winner.points} points!` : 'Game Over!',
+            leaderboard
+        };
+        this.sendToHost(code, state);
+        this.sendToPlayers(code, state);
     }
     handleConnection(socket) {
         console.log('a user connected', socket.id);
@@ -595,38 +748,11 @@ class SocketHandlers {
                     });
                     return;
                 }
-                // Reset lie data for new game
-                gameState.resetLieData();
-                gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
-                // Set timer start time
-                gameState.setTimerValue(60);
-                // Send timer screen to host only
-                this.sendToHost(code, {
-                    screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                    text: 'Truthfully answer the questions on your device.',
-                    timerValue: 60
-                });
-                // Assign DIFFERENT question to each player
-                userNames.forEach(username => {
-                    // Get a unique question for each player
-                    const questionObj = gameState.assignQuestion(username);
-                    if (questionObj) {
-                        // Send to specific player using all their sockets (supports multiple devices)
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const socketIds = socketInfo.playerSockets[username];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.c3SubmitTruth,
-                                    text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                                    question: questionObj.question,
-                                    questionIndex: questionObj.index,
-                                    instructionText: 'Please answer this question truthfully about yourself'
-                                });
-                            });
-                        }
-                    }
-                });
+                // Wipe anything left from a previous game in this room: answers, question
+                // assignments, lies, votes, the lie target, and the used-question pool.
+                // resetLieData() alone left answers and the pool behind (CNG-010).
+                gameState.resetForNewGame();
+                this.beginAnsweringRound(code, gameState, 'Truthfully answer the questions on your device.', ROUND_SECONDS);
             }
         });
         socket.on('sendQuestionAnswer', ({ name, code, answer, question }) => {
@@ -648,54 +774,7 @@ class SocketHandlers {
                 // Check if all users have answered
                 if (gameState.allUsersHaveAnswered()) {
                     console.log('ALL PLAYERS HAVE ANSWERED! Transitioning to lie phase.');
-                    // All truths are in! Start the lie phase.
-                    // Get first player to target (use skipping method for consistency)
-                    const firstTarget = gameState.getNextLieTargetPlayerSkippingMissing();
-                    console.log('First target player:', firstTarget);
-                    if (firstTarget) {
-                        gameState.setCurrentLieTargetPlayer(firstTarget);
-                        gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
-                        gameState.setTimerValue(60);
-                        const truth = gameState.getTruthForPlayer(firstTarget);
-                        const userNames = gameState.getUserNames();
-                        // Send timer to host
-                        console.log('Sending h2 to host with text: Now submitting lies for ' + firstTarget);
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                            text: 'Now submitting lies for ' + firstTarget + '!',
-                            timerValue: 60
-                        });
-                        // Send lie prompt to all OTHER players (to all their sockets)
-                        userNames.forEach(username => {
-                            if (username !== firstTarget) {
-                                // This player should submit a lie for firstTarget's question
-                                const socketInfo = this.socketStuff[code];
-                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const socketIds = socketInfo.playerSockets[username];
-                                    socketIds.forEach(socketId => {
-                                        this.io.to(socketId).emit('gameState', {
-                                            screen: IncludeStuff_1.Screens.c5SubmitLie,
-                                            text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
-                                            question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
-                                            targetPlayer: firstTarget,
-                                            instructionText: `Write a fooling answer for this question about ${firstTarget}`
-                                        });
-                                    });
-                                }
-                            }
-                        });
-                        // Send waiting to target player (they already answered truth) - to all their sockets
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
-                            const socketIds = socketInfo.playerSockets[firstTarget];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                    text: 'Your truth has been submitted! Now others will submit lies for your question.'
-                                });
-                            });
-                        }
-                    }
+                    this.advanceToNextLieRoundOrEnd(code, gameState);
                 }
                 else {
                     // Send thank you / waiting screen to player
@@ -729,54 +808,8 @@ class SocketHandlers {
                 gameState.addLie(targetPlayer, name, lie);
                 // Check if all lies are submitted
                 if (gameState.allLiesSubmittedForTarget(targetPlayer)) {
-                    // All lies in! Move to voting immediately
                     console.log('All lies submitted, proceeding to voting...');
-                    const userNames = gameState.getUserNames();
-                    gameState.setPhase(GameState_1.GamePhase.VotingOnLies);
-                    gameState.setTimerValue(60);
-                    const truth = gameState.getTruthForPlayer(targetPlayer);
-                    const lies = gameState.getLiesForPlayer(targetPlayer);
-                    // Build all answers (truth + lies)
-                    const allAnswers = [
-                        { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                        ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    // Shuffle for voting
-                    const shuffledAnswers = shuffleArray(allAnswers);
-                    // Send timer to host
-                    this.sendToHost(code, {
-                        screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                        text: 'Voting on lies for ' + targetPlayer + '!',
-                        timerValue: 60,
-                        answers: shuffledAnswers
-                    });
-                    // Send voting to all players except target (to all their sockets)
-                    userNames.forEach(username => {
-                        if (username !== targetPlayer) {
-                            const socketInfo = this.socketStuff[code];
-                            if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                const socketIds = socketInfo.playerSockets[username];
-                                socketIds.forEach(socketId => {
-                                    this.io.to(socketId).emit('gameState', {
-                                        screen: IncludeStuff_1.Screens.c4PickTheBestAnswerOutOfAList,
-                                        text: 'Which one is the TRUTH about ' + targetPlayer + '?',
-                                        answers: shuffledAnswers
-                                    });
-                                });
-                            }
-                        }
-                    });
-                    // Send waiting to target player (to all their sockets)
-                    const socketInfo = this.socketStuff[code];
-                    if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
-                        const socketIds = socketInfo.playerSockets[targetPlayer];
-                        socketIds.forEach(socketId => {
-                            this.io.to(socketId).emit('gameState', {
-                                screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Others are voting on your question!'
-                            });
-                        });
-                    }
+                    this.beginVoting(code, gameState, targetPlayer);
                 }
                 else {
                     // Send waiting to player
@@ -810,54 +843,8 @@ class SocketHandlers {
                 gameState.addVote(targetPlayer, name, selectedUsername);
                 // Check if all votes are in
                 if (gameState.allVotesSubmittedForTarget(targetPlayer)) {
-                    // All votes in! Calculate points and show results
-                    gameState.calculateLiePoints(targetPlayer);
-                    gameState.setPhase(GameState_1.GamePhase.ShowingLieResults);
-                    const truth = gameState.getTruthForPlayer(targetPlayer);
-                    const lies = gameState.getLiesForPlayer(targetPlayer);
-                    const votes = gameState.getVotesForPlayer(targetPlayer);
-                    const leaderboard = gameState.getLeaderboard();
-                    // Build results
-                    const allAnswers = [
-                        { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                        ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    // Count votes per answer
-                    const voteCounts = {};
-                    votes.forEach(v => {
-                        if (!voteCounts[v.selectedUsername]) {
-                            voteCounts[v.selectedUsername] = [];
-                        }
-                        voteCounts[v.selectedUsername].push(v.voter);
-                    });
-                    const results = allAnswers.map(a => ({
-                        username: a.username,
-                        answer: a.answer,
-                        isTruth: a.isTruth,
-                        voters: voteCounts[a.username] || []
-                    }));
-                    // Show results to host
-                    this.sendToHost(code, {
-                        screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
-                        text: 'Results for ' + targetPlayer + '!',
-                        answers: results
-                    });
-                    // Show results to all players (to all their sockets)
-                    const userNames = gameState.getUserNames();
-                    userNames.forEach(username => {
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const socketIds = socketInfo.playerSockets[username];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
-                                    text: 'Results for ' + targetPlayer + '!',
-                                    answers: results
-                                });
-                            });
-                        }
-                    });
-                    // DO NOT auto-continue - wait for host to click Continue
+                    // Stops at the reveal - the host drives what happens next.
+                    this.showLieResults(code, gameState, targetPlayer);
                 }
                 else {
                     // Send waiting to player
@@ -902,29 +889,11 @@ class SocketHandlers {
             code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
-                // Start a new round
-                gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
-                gameState.clearAnswers();
-                // Send timer screen to host only
-                this.sendToHost(code, {
-                    screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                    text: 'Truthfully answer the questions on your device.',
-                    timerValue: 30
-                });
-                // Assign new questions to each player
-                const userNames = gameState.getUserNames();
-                userNames.forEach(username => {
-                    const questionObj = gameState.assignQuestion(username);
-                    if (questionObj) {
-                        this.sendToPlayers(code, {
-                            screen: IncludeStuff_1.Screens.c3SubmitTruth,
-                            text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                            question: questionObj.question,
-                            questionIndex: questionObj.index,
-                            instructionText: 'Please answer this question truthfully about yourself'
-                        });
-                    }
-                });
+                // This used to loop over players calling sendToPlayers, which is a room
+                // broadcast and ignores the username entirely - so every player's question
+                // went to everyone and they all ended up looking at whichever was drawn
+                // last (CNG-013). beginAnsweringRound targets each player properly.
+                this.restartRound(code, gameState, 'Truthfully answer the questions on your device.');
             }
         });
         // Host clicks continue on results screen
@@ -950,49 +919,8 @@ class SocketHandlers {
             code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState && gameState.getPhase() === GameState_1.GamePhase.ShowingPoints) {
-                const hasMoreTargets = gameState.hasMoreLieTargets();
-                if (hasMoreTargets) {
-                    // More players to process - move to next lie target (skipping those without truths)
-                    gameState.nextLieTarget();
-                    gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
-                    gameState.setTimerValue(60);
-                    // Send timer to host
-                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                    this.sendToHost(code, {
-                        screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                        text: targetPlayer + ' - submit your lies!',
-                        timerValue: 60
-                    });
-                    // Send each player to correct screen using the centralized function
-                    const userNames = gameState.getUserNames();
-                    const socketInfo = this.socketStuff[code];
-                    userNames.forEach(username => {
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const socketIds = socketInfo.playerSockets[username];
-                            // Send to all sockets for this user
-                            socketIds.forEach(socketId => {
-                                const socket = this.io.sockets.sockets.get(socketId);
-                                if (socket) {
-                                    this.sendPlayerToCorrectScreen(code, gameState, username, socket);
-                                }
-                            });
-                        }
-                    });
-                }
-                else {
-                    // No more players - end game
-                    gameState.setPhase(GameState_1.GamePhase.GameOver);
-                    this.sendToHost(code, {
-                        screen: IncludeStuff_1.Screens.h6ShowTheWinner,
-                        text: 'Game Over!',
-                        leaderboard: gameState.getLeaderboard()
-                    });
-                    this.sendToPlayers(code, {
-                        screen: IncludeStuff_1.Screens.h6ShowTheWinner,
-                        text: 'Game Over!',
-                        leaderboard: gameState.getLeaderboard()
-                    });
-                }
+                // Next player's round, or the winner if that was the last one.
+                this.advanceToNextLieRoundOrEnd(code, gameState);
             }
         });
         socket.on('endGame', ({ code }) => {
@@ -1023,462 +951,73 @@ class SocketHandlers {
             const phase = gameState.getPhase();
             console.log('Timer expired for game ' + code + ' phase: ' + phase + ' token: ' + phaseToken);
             // The countdown runs in the host's browser, and hostSocketIds is a list, so
-            // two host tabs means two countdowns and two of these events. Each h2 emit
-            // carries the token of the segment it is timing; anything that ends that
-            // segment bumps the token. So the first event is handled and the rest are
+            // two host tabs means two countdowns and two of these events. Each host-bound
+            // state carries the token of the segment it is timing, and anything that ends
+            // that segment bumps it - so the first event is handled and the rest are
             // recognised as timers for a segment that is already over.
             //
-            // Without this the phase guard below admits three phases at once, so a
-            // second event lands in the phase the first one just created and cascades:
-            // AnsweringQuestions -> SubmittingLies -> "no lies submitted", which either
-            // restarts the round or skips a player with nobody having typed a thing
-            // (CNG-003).
-            // Every host-bound state carries a token (see withPhaseToken), so a host on
-            // the timer screen always has one. A missing token therefore means a stale
-            // client bundle, and an event we cannot place in time is not one to act on:
-            // reject rather than letting it through, which would leave the guard
-            // bypassable by exactly the stale tab it exists to stop. The host refreshing
-            // recovers, and reconnects now resync properly (CNG-005).
+            // Without this the phase check below admits three phases at once, and a second
+            // event lands in the phase the first one just created and cascades:
+            // AnsweringQuestions -> SubmittingLies -> "no lies submitted", restarting the
+            // round or skipping a player with nobody having typed a thing (CNG-003).
+            //
+            // A missing token is rejected too. Every host emit carries one, so absence
+            // means a stale client bundle; allowing it would leave the guard bypassable by
+            // exactly the tab it exists to stop. The host refreshing recovers.
             const currentToken = gameState.getPhaseToken();
             if (phaseToken !== currentToken) {
                 console.log('Ignoring stale timerExpired (token ' + phaseToken + ', current ' + currentToken + ')');
                 return;
             }
-            // If we're no longer in a timed phase, ignore this timer event
-            // (It might be from a previous timer that was still running)
-            if (phase !== GameState_1.GamePhase.AnsweringQuestions &&
-                phase !== GameState_1.GamePhase.SubmittingLies &&
-                phase !== GameState_1.GamePhase.VotingOnLies) {
-                console.log('Ignoring timerExpired for phase: ' + phase);
-                return;
-            }
-            if (phase === GameState_1.GamePhase.AnsweringQuestions) {
-                // Timer expired during truth phase - check if we have answers, then start lie phase
-                if (gameState.allUsersHaveAnswered()) {
-                    // All answered, start lie phase (same logic as in sendQuestionAnswer)
-                    // Use skipping method to handle any players who didn't submit truths
-                    const firstTarget = gameState.getNextLieTargetPlayerSkippingMissing();
-                    if (firstTarget) {
-                        gameState.setCurrentLieTargetPlayer(firstTarget);
-                        gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
-                        const truth = gameState.getTruthForPlayer(firstTarget);
-                        const userNames = gameState.getUserNames();
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                            text: 'Now submitting lies for ' + firstTarget + '!',
-                            timerValue: 60
-                        });
-                        userNames.forEach(username => {
-                            if (username !== firstTarget) {
-                                const socketInfo = this.socketStuff[code];
-                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const socketIds = socketInfo.playerSockets[username];
-                                    socketIds.forEach(socketId => {
-                                        this.io.to(socketId).emit('gameState', {
-                                            screen: IncludeStuff_1.Screens.c5SubmitLie,
-                                            text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
-                                            question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
-                                            targetPlayer: firstTarget,
-                                            instructionText: `Write a fooling answer for this question about ${firstTarget}`
-                                        });
-                                    });
-                                }
-                            }
-                        });
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
-                            const socketIds = socketInfo.playerSockets[firstTarget];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                    text: 'Your truth has been submitted! Now others will submit lies for your question.'
-                                });
-                            });
-                        }
+            const targetPlayer = gameState.getCurrentLieTargetPlayer();
+            switch (phase) {
+                case GameState_1.GamePhase.AnsweringQuestions: {
+                    // Play on with whatever truths we have. Only start over if there is
+                    // nothing at all to work with.
+                    const nextTarget = gameState.getNextLieTargetPlayerSkippingMissing();
+                    if (nextTarget) {
+                        console.log('Answer timer expired - proceeding with the answers we have');
+                        this.beginLieRound(code, gameState, nextTarget);
                     }
-                }
-                else {
-                    // Not all answered - check if ANY answers were submitted
-                    const answerCount = Object.keys(gameState['userAnswers'] || {}).length;
-                    if (answerCount === 0) {
-                        // No one submitted any answers - restart the round
-                        console.log('No answers submitted - restarting round');
-                        gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
-                        gameState.clearAnswers();
-                        // A restarted round has to be actually fresh. clearAnswers alone
-                        // leaves currentLieTargetPlayer pointing mid-list, so the lie
-                        // phase would resume AFTER the old target and never come back to
-                        // the players before them - and the abandoned round's lies and
-                        // votes would survive into the new one (CNG-025).
-                        gameState.resetLieData();
-                        gameState.setTimerValue(30);
-                        // Send timer screen to host only
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                            text: 'No answers submitted! Please answer the questions.',
-                            timerValue: 30
-                        });
-                        // Re-send questions to all players
-                        const userNames = gameState.getUserNames();
-                        userNames.forEach(username => {
-                            const questionObj = gameState.assignQuestion(username);
-                            if (questionObj) {
-                                const socketInfo = this.socketStuff[code];
-                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const socketIds = socketInfo.playerSockets[username];
-                                    socketIds.forEach(socketId => {
-                                        this.io.to(socketId).emit('gameState', {
-                                            screen: IncludeStuff_1.Screens.c3SubmitTruth,
-                                            text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                                            question: questionObj.question,
-                                            questionIndex: questionObj.index,
-                                            instructionText: 'Please answer this question truthfully about yourself'
-                                        });
-                                    });
-                                }
-                            }
-                        });
-                        return;
+                    else {
+                        console.log('Answer timer expired with no answers - restarting round');
+                        this.restartRound(code, gameState, 'No answers submitted! Please answer the questions.');
                     }
-                    // PROCEED with game using available answers!
-                    console.log('Timer expired but not all answered - proceeding with ' + answerCount + ' answers');
-                    // Use skipping method to handle players who didn't submit truths
-                    const firstTarget = gameState.getNextLieTargetPlayerSkippingMissing();
-                    if (firstTarget) {
-                        gameState.setCurrentLieTargetPlayer(firstTarget);
-                        gameState.setPhase(GameState_1.GamePhase.SubmittingLies);
-                        gameState.setTimerValue(60);
-                        const truth = gameState.getTruthForPlayer(firstTarget);
-                        const userNames = gameState.getUserNames();
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                            text: 'Now submitting lies for ' + firstTarget + '!',
-                            timerValue: 60
-                        });
-                        userNames.forEach(username => {
-                            if (username !== firstTarget) {
-                                const socketInfo = this.socketStuff[code];
-                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const socketIds = socketInfo.playerSockets[username];
-                                    socketIds.forEach(socketId => {
-                                        this.io.to(socketId).emit('gameState', {
-                                            screen: IncludeStuff_1.Screens.c5SubmitLie,
-                                            text: 'Write a LIE for this question about ' + firstTarget + ':\n\n' + ((truth === null || truth === void 0 ? void 0 : truth.question) || ''),
-                                            question: (truth === null || truth === void 0 ? void 0 : truth.question) || '',
-                                            targetPlayer: firstTarget,
-                                            instructionText: `Write a fooling answer for this question about ${firstTarget}`
-                                        });
-                                    });
-                                }
-                            }
-                        });
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[firstTarget]) {
-                            const socketIds = socketInfo.playerSockets[firstTarget];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                    text: 'Your truth has been submitted! Now others will submit lies for your question.'
-                                });
-                            });
-                        }
+                    break;
+                }
+                case GameState_1.GamePhase.SubmittingLies: {
+                    if (!targetPlayer)
+                        break;
+                    if (gameState.getLiesForPlayer(targetPlayer).length > 0) {
+                        // At least one lie: there's something to vote on, so vote on it.
+                        console.log('Lie timer expired - voting on the lies we have');
+                        this.beginVoting(code, gameState, targetPlayer);
                     }
-                }
-            }
-            else if (phase === GameState_1.GamePhase.SubmittingLies) {
-                // Timer expired during lie submission - check if enough lies submitted
-                const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                if (targetPlayer && gameState.allLiesSubmittedForTarget(targetPlayer)) {
-                    // All lies in, move to voting (same as submitLie handler)
-                    gameState.setPhase(GameState_1.GamePhase.VotingOnLies);
-                    const truth = gameState.getTruthForPlayer(targetPlayer);
-                    const lies = gameState.getLiesForPlayer(targetPlayer);
-                    const userNames = gameState.getUserNames();
-                    const allAnswers = [
-                        { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                        ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    const shuffledAnswers = shuffleArray(allAnswers);
-                    this.sendToHost(code, {
-                        screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                        text: 'Voting on lies for ' + targetPlayer + '!',
-                        timerValue: 60,
-                        answers: shuffledAnswers
-                    });
-                    userNames.forEach(username => {
-                        if (username !== targetPlayer) {
-                            const socketInfo = this.socketStuff[code];
-                            if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                const socketIds = socketInfo.playerSockets[username];
-                                socketIds.forEach(socketId => {
-                                    this.io.to(socketId).emit('gameState', {
-                                        screen: IncludeStuff_1.Screens.c4PickTheBestAnswerOutOfAList,
-                                        text: 'Which one is the TRUTH about ' + targetPlayer + '?',
-                                        answers: shuffledAnswers
-                                    });
-                                });
-                            }
-                        }
-                    });
-                    const socketInfo = this.socketStuff[code];
-                    if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
-                        const socketIds = socketInfo.playerSockets[targetPlayer];
-                        socketIds.forEach(socketId => {
-                            this.io.to(socketId).emit('gameState', {
-                                screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Others are voting on your question!'
-                            });
-                        });
+                    else if (targetPlayer === gameState.getUserNames()[0]) {
+                        // Nobody lied for the very first target: nothing has happened yet,
+                        // so start the whole round over rather than marching through
+                        // targets nobody is playing along with.
+                        console.log('No lies for the first target - restarting round');
+                        this.restartRound(code, gameState, 'No lies submitted! Starting fresh round.');
                     }
-                }
-                else {
-                    // Not all lies in - PROCEED with game using available lies!
-                    // Don't go back to lobby - just continue with who we have
-                    console.log('Lie timer expired but not all lies submitted - proceeding with available lies');
-                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                    if (targetPlayer) {
-                        const truth = gameState.getTruthForPlayer(targetPlayer);
-                        const lies = gameState.getLiesForPlayer(targetPlayer);
-                        const userNames = gameState.getUserNames();
-                        // If no lies were submitted, check if this is the first target
-                        // If so, restart the round
-                        if (lies.length === 0) {
-                            const allUserNames = gameState.getUserNames();
-                            // Check if this is the first target
-                            const firstTarget = allUserNames[0];
-                            if (targetPlayer === firstTarget) {
-                                // No lies for the first player - restart the game
-                                console.log('No lies submitted for first player - restarting round');
-                                gameState.setPhase(GameState_1.GamePhase.AnsweringQuestions);
-                                gameState.clearAnswers();
-                                // See CNG-025 above - a restart must reset the lie round
-                                // pointer and drop the abandoned round's lies/votes.
-                                gameState.resetLieData();
-                                gameState.setTimerValue(30);
-                                // Send timer screen to host only
-                                this.sendToHost(code, {
-                                    screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                                    text: 'No lies submitted! Starting fresh round.',
-                                    timerValue: 30
-                                });
-                                // Re-send questions to all players
-                                allUserNames.forEach(username => {
-                                    const questionObj = gameState.assignQuestion(username);
-                                    if (questionObj) {
-                                        const socketInfo = this.socketStuff[code];
-                                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                            const socketIds = socketInfo.playerSockets[username];
-                                            socketIds.forEach(socketId => {
-                                                this.io.to(socketId).emit('gameState', {
-                                                    screen: IncludeStuff_1.Screens.c3SubmitTruth,
-                                                    text: `Please truthfully answer this question:\n\n${questionObj.question}`,
-                                                    question: questionObj.question,
-                                                    questionIndex: questionObj.index,
-                                                    instructionText: 'Please answer this question truthfully about yourself'
-                                                });
-                                            });
-                                        }
-                                    }
-                                });
-                                return;
-                            }
-                            // Not first target - skip to next player
-                            console.log('No lies submitted for ' + targetPlayer + ', skipping to next player');
-                            // Move to next target player
-                            gameState.nextLieTarget();
-                            const nextTargetPlayer = gameState.getCurrentLieTargetPlayer();
-                            if (nextTargetPlayer) {
-                                const nextTruth = gameState.getTruthForPlayer(nextTargetPlayer);
-                                // Set the timer so the new round has one, and so the host's
-                                // countdown restarts rather than inheriting the expired one.
-                                gameState.setTimerValue(60);
-                                // Send host to next round
-                                this.sendToHost(code, {
-                                    screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                                    text: 'Now submitting lies for ' + nextTargetPlayer + '!',
-                                    timerValue: 60
-                                });
-                                // Everyone EXCEPT the target writes a lie about the target;
-                                // the target waits. This path had the two swapped: it asked
-                                // the target to lie about themselves and told everyone else
-                                // to wait (CNG-004).
-                                gameState.getUserNames().forEach(username => {
-                                    if (username === nextTargetPlayer) {
-                                        this.sendToUserSockets(code, username, 'gameState', {
-                                            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                            text: 'Your truth has been submitted! Now others will submit lies for your question.'
-                                        });
-                                    }
-                                    else {
-                                        this.sendToUserSockets(code, username, 'gameState', {
-                                            screen: IncludeStuff_1.Screens.c5SubmitLie,
-                                            text: 'Write a LIE for this question about ' + nextTargetPlayer + ':\n\n' + ((nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || ''),
-                                            question: (nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || '',
-                                            targetPlayer: nextTargetPlayer,
-                                            instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
-                                        });
-                                    }
-                                });
-                            }
-                            else {
-                                // No more players to process, move to showing results or end
-                                console.log('No more lie targets, ending round');
-                                gameState.setPhase(GameState_1.GamePhase.ShowingPoints);
-                                this.sendToHost(code, {
-                                    screen: IncludeStuff_1.Screens.h5ShowThePointsForTheRound,
-                                    text: 'Round complete!',
-                                    leaderboard: gameState.getLeaderboard()
-                                });
-                            }
-                            return;
-                        }
-                        // Proceed with voting (at least 1 lie exists)
-                        gameState.setPhase(GameState_1.GamePhase.VotingOnLies);
-                        gameState.setTimerValue(60);
-                        const allAnswers = [
-                            { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                            ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                        ];
-                        const shuffledAnswers = shuffleArray(allAnswers);
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                            text: 'Voting on lies for ' + targetPlayer + '!',
-                            timerValue: 60,
-                            answers: shuffledAnswers
-                        });
-                        userNames.forEach(username => {
-                            if (username !== targetPlayer) {
-                                const socketInfo = this.socketStuff[code];
-                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                    const socketIds = socketInfo.playerSockets[username];
-                                    socketIds.forEach(socketId => {
-                                        this.io.to(socketId).emit('gameState', {
-                                            screen: IncludeStuff_1.Screens.c4PickTheBestAnswerOutOfAList,
-                                            text: 'Which one is the TRUTH about ' + targetPlayer + '?',
-                                            answers: shuffledAnswers
-                                        });
-                                    });
-                                }
-                            }
-                        });
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[targetPlayer]) {
-                            const socketIds = socketInfo.playerSockets[targetPlayer];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                    text: 'Others are voting on your question!'
-                                });
-                            });
-                        }
+                    else {
+                        console.log('No lies for ' + targetPlayer + ' - skipping to the next target');
+                        this.advanceToNextLieRoundOrEnd(code, gameState);
                     }
+                    break;
                 }
-            }
-            else if (phase === GameState_1.GamePhase.VotingOnLies) {
-                // Timer expired during voting - check if all voted
-                const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                if (targetPlayer && gameState.allVotesSubmittedForTarget(targetPlayer)) {
-                    // All voted, process results (same as voteOnLie handler)
-                    gameState.calculateLiePoints(targetPlayer);
-                    gameState.setPhase(GameState_1.GamePhase.ShowingLieResults);
-                    const truth = gameState.getTruthForPlayer(targetPlayer);
-                    const lies = gameState.getLiesForPlayer(targetPlayer);
-                    const votes = gameState.getVotesForPlayer(targetPlayer);
-                    const leaderboard = gameState.getLeaderboard();
-                    const allAnswers = [
-                        { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                        ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    const voteCounts = {};
-                    votes.forEach(v => {
-                        if (!voteCounts[v.selectedUsername]) {
-                            voteCounts[v.selectedUsername] = [];
-                        }
-                        voteCounts[v.selectedUsername].push(v.voter);
-                    });
-                    const results = shuffleArray(allAnswers.map(a => ({
-                        username: a.username,
-                        answer: a.answer,
-                        isTruth: a.isTruth,
-                        voters: voteCounts[a.username] || []
-                    })));
-                    this.sendToHost(code, {
-                        screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
-                        text: 'Results for ' + targetPlayer + '!',
-                        answers: results
-                    });
-                    const userNames = gameState.getUserNames();
-                    userNames.forEach(username => {
-                        const socketInfo = this.socketStuff[code];
-                        if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                            const socketIds = socketInfo.playerSockets[username];
-                            socketIds.forEach(socketId => {
-                                this.io.to(socketId).emit('gameState', {
-                                    screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
-                                    text: 'Results for ' + targetPlayer + '!',
-                                    answers: results
-                                });
-                            });
-                        }
-                    });
-                    // DO NOT auto-continue - wait for host to click continue
+                case GameState_1.GamePhase.VotingOnLies: {
+                    if (!targetPlayer)
+                        break;
+                    // Score whatever votes are in and reveal. Identical whether or not
+                    // everyone voted, which is why this is no longer two branches.
+                    console.log('Vote timer expired - scoring the votes we have');
+                    this.showLieResults(code, gameState, targetPlayer);
+                    break;
                 }
-                else {
-                    // Not all voted - PROCEED with game using available votes!
-                    console.log('Voting timer expired but not all voted - proceeding with available votes');
-                    const targetPlayer = gameState.getCurrentLieTargetPlayer();
-                    if (targetPlayer) {
-                        gameState.calculateLiePoints(targetPlayer);
-                        gameState.setPhase(GameState_1.GamePhase.ShowingLieResults);
-                        const truth = gameState.getTruthForPlayer(targetPlayer);
-                        const lies = gameState.getLiesForPlayer(targetPlayer);
-                        const votes = gameState.getVotesForPlayer(targetPlayer);
-                        const leaderboard = gameState.getLeaderboard();
-                        const allAnswers = [
-                            { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                            ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                        ];
-                        const voteCounts = {};
-                        votes.forEach(v => {
-                            if (!voteCounts[v.selectedUsername]) {
-                                voteCounts[v.selectedUsername] = [];
-                            }
-                            voteCounts[v.selectedUsername].push(v.voter);
-                        });
-                        const results = allAnswers.map(a => ({
-                            username: a.username,
-                            answer: a.answer,
-                            isTruth: a.isTruth,
-                            voters: voteCounts[a.username] || []
-                        }));
-                        this.sendToHost(code, {
-                            screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
-                            text: 'Results for ' + targetPlayer + '!',
-                            answers: results
-                        });
-                        const userNames = gameState.getUserNames();
-                        userNames.forEach(username => {
-                            const socketInfo = this.socketStuff[code];
-                            if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                const socketIds = socketInfo.playerSockets[username];
-                                socketIds.forEach(socketId => {
-                                    this.io.to(socketId).emit('gameState', {
-                                        screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
-                                        text: 'Results for ' + targetPlayer + '!',
-                                        answers: results
-                                    });
-                                });
-                            }
-                        });
-                        // Stop here and wait for the host, exactly like the all-voted path
-                        // in voteOnLie. This used to schedule a 5s timeout, and another
-                        // 5s inside it, that showed points and advanced to the next
-                        // target without ever re-checking the phase. The host can click
-                        // Continue during those 10 seconds, so the game advanced twice
-                        // and a player's whole round got skipped. The timeouts were also
-                        // never cleared, so they outlived the game (CNG-011).
-                    }
-                }
+                default:
+                    // Not a timed phase - nothing to expire.
+                    console.log('Ignoring timerExpired for phase: ' + phase);
             }
         });
         socket.on('killServer', () => {

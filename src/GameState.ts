@@ -259,17 +259,6 @@ export class GameState {
         };
     }
 
-    getAllAnswers(): UserAnswer[] {
-        return Object.values(this.userAnswers);
-    }
-
-    getAllAnswersWithUsernames(): Array<{ username: string; answer: UserAnswer }> {
-        return Object.entries(this.userAnswers).map(([username, answer]) => ({
-            username,
-            answer
-        }));
-    }
-
     // Clears a round's Q&A. Assignments go with the answers - every caller restarts the
     // round and reassigns immediately, so a stale assignment must not survive.
     clearAnswers(): void {
@@ -430,20 +419,6 @@ export class GameState {
         });
     }
 
-    // Get next player for lie round, or null if done
-    getNextLieTargetPlayer(): string | null {
-        const userNames = this.getUserNames();
-        const currentIndex = userNames.indexOf(this.currentLieTargetPlayer);
-        
-        if (currentIndex === -1) {
-            // First player
-            return userNames.length > 0 ? userNames[0] : null;
-        }
-        
-        const nextIndex = currentIndex + 1;
-        return nextIndex < userNames.length ? userNames[nextIndex] : null;
-    }
-
     // Get next player for lie round, skipping players without a truth
     getNextLieTargetPlayerSkippingMissing(): string | null {
         const userNames = this.getUserNames();
@@ -472,43 +447,25 @@ export class GameState {
         return null;
     }
     
-    // Advance to next lie target player
-    nextLieTarget(): void {
-        const next = this.getNextLieTargetPlayerSkippingMissing();
-        if (next) {
-            this.currentLieTargetPlayer = next;
-        }
-    }
-
-    // Check if all lie rounds are done
-    isLiePhaseDone(): boolean {
-        return this.getNextLieTargetPlayerSkippingMissing() === null && this.currentLieTargetPlayer !== '';
-    }
-
-    // Check if there are more targets with truths (for continuing after showing points)
-    hasMoreLieTargets(): boolean {
-        // Check if there are more players with truths AFTER the current one
-        const userNames = this.getUserNames();
-        if (!this.currentLieTargetPlayer) {
-            return userNames.some(name => this.userAnswers[name]);
-        }
-        
-        const currentIndex = userNames.indexOf(this.currentLieTargetPlayer);
-        
-        for (let i = currentIndex + 1; i < userNames.length; i++) {
-            if (this.userAnswers[userNames[i]]) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
     // Reset lies and votes for new game
     resetLieData(): void {
         this.lies = {};
         this.votes = {};
         this.currentLieTargetPlayer = '';
+    }
+
+    /**
+     * Wipe everything belonging to a previous game in this room, so starting again is
+     * actually starting again. resetLieData() alone left the answers and the used-question
+     * pool behind, so a replay could see allUsersHaveAnswered() true before anyone typed,
+     * and kept draining a 30-question pool across games (CNG-010).
+     * Users and their points are left alone - startGame only runs from CollectingUsers,
+     * which is only reachable on a fresh game.
+     */
+    resetForNewGame(): void {
+        this.clearAnswers();
+        this.resetLieData();
+        this.usedQuestionIndexes = [];
     }
 
     /**

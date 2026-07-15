@@ -18,11 +18,11 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-007](#cng-007) | High | **Fixed** | Host refresh lands on the player name-entry screen |
 | [CNG-008](#cng-008) | High | Open | Duplicate name silently merges two devices into one player |
 | [CNG-009](#cng-009) | High | Open | Server trusts the client-supplied `name` on every event |
-| [CNG-010](#cng-010) | High | Open | `startGame` doesn't clear answers or the question pool |
+| [CNG-010](#cng-010) | High | **Fixed** | `startGame` doesn't clear answers or the question pool |
 | [CNG-011](#cng-011) | High | **Fixed** | Blind `setTimeout` chain advances the game behind the host's back |
 | [CNG-012](#cng-012) | High | Open | `addLie`/`addVote` don't dedupe — duplicate entries and double points |
-| [CNG-013](#cng-013) | Medium | Open | `nextRound` broadcasts every question to every player |
-| [CNG-014](#cng-014) | Medium | Partly fixed | Skip path omits `targetPlayer`, client submits against a stale target |
+| [CNG-013](#cng-013) | Medium | **Fixed** | `nextRound` broadcasts every question to every player |
+| [CNG-014](#cng-014) | Medium | **Fixed** | Skip path omits `targetPlayer`, client submits against a stale target |
 | [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
 | [CNG-016](#cng-016) | Medium | **Fixed** | Games are never expired — 37 stale games on disk |
 | [CNG-017](#cng-017) | Medium | Open | H5 auto-continue re-arms forever |
@@ -30,8 +30,8 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-019](#cng-019) | Medium | Open | Any client can claim to be the host of any game |
 | [CNG-020](#cng-020) | Low | Open | Self-vote only prevented client-side |
 | [CNG-021](#cng-021) | High | Open | No automated test can reach any of this |
-| [CNG-022](#cng-022) | Low | Open | Dead code: server-side timer, `sendToUserSockets` |
-| [CNG-023](#cng-023) | Low | Open | ~700 lines of duplicated phase-transition logic |
+| [CNG-022](#cng-022) | Low | Partly fixed | Dead code: server-side timer, `sendToUserSockets` |
+| [CNG-023](#cng-023) | **High** | **Fixed** | ~700 lines of duplicated phase-transition logic |
 | [CNG-025](#cng-025) | High | **Fixed** | A restarted round isn't fresh — keeps the old target pointer, lies and votes |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
@@ -384,7 +384,12 @@ fix for the identity drift behind CNG-005/007/008.
 
 ### CNG-010
 **`startGame` doesn't clear answers or the question pool**
-High · Open · `src/socketHandlers.ts:614-617`, `src/GameState.ts:427-431`
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:614-617`, `src/GameState.ts:427-431`
+
+> Fixed: `startGame` calls a new `GameState.resetForNewGame()` (answers, question
+> assignments, lies, votes, target, used-question pool). Points and users are left alone
+> deliberately — `startGame` only runs from `CollectingUsers`, which is only reachable on
+> a fresh game, so resetting them would be dead code pretending to be a safeguard.
 
 `startGame` calls `resetLieData()`, which clears `lies`, `votes`, and
 `currentLieTargetPlayer` — but not `userAnswers`, and not `usedQuestionIndexes`.
@@ -434,7 +439,12 @@ duplicate. Should be upsert-by-username.
 
 ### CNG-013
 **`nextRound` broadcasts every question to every player**
-Medium · Open · `src/socketHandlers.ts:993-1004`
+Medium · **Fixed 2026-07-15** · `src/socketHandlers.ts:993-1004`
+
+> Fixed: `nextRound` now delegates to `restartRound` → `beginAnsweringRound`, which
+> targets each player's own sockets. The old loop called `sendToPlayers` — a room
+> broadcast that ignores the username entirely — so every player's question went to
+> everyone and they all ended up on whichever was drawn last.
 
 ```ts
 userNames.forEach(username => {
@@ -456,10 +466,9 @@ at whichever question was drawn last. (Every other assignment site correctly tar
 **Skip path omits `targetPlayer`, client submits against a stale target**
 Medium · **Partly fixed 2026-07-15** · `src/socketHandlers.ts:1396-1402`
 
-> The `c5SubmitLie` emit in the skip path now carries `targetPlayer` (fixed alongside
-> CNG-004). The two voting emits at `:809` and `:1302` still omit it and still work
-> only by accident, relying on the client's merge leaving the right value behind.
-> Still open for those; fold into T6.
+> **Fully fixed with T6.** Every transition now emits through one method, and both
+> `beginLieRound` and `beginVoting` carry `targetPlayer` explicitly. Nothing relies on
+> the client's merge leaving the right value behind any more.
 
 That `c5SubmitLie` emit sends `screen`, `text`, `question`, `instructionText` — but
 no `targetPlayer`. Because `App.setGameState` merges (`{...prev, ...next}`,
@@ -583,7 +592,15 @@ here after the criticals.
 
 ### CNG-022
 **Dead code: server-side timer, `sendToUserSockets`**
-Low · Open · `src/GameState.ts:211-232`, `src/socketHandlers.ts:59-74`
+Low · **Partly fixed 2026-07-15** · `src/GameState.ts:211-232`, `src/socketHandlers.ts:59-74`
+
+> `sendToUserSockets` is now the single way player-bound state is sent; the ~12
+> hand-inlined copies of its loop are gone (T6). Also removed `sendToRoom`,
+> `sendToSocket`, `getClientState`, `getAllAnswers`, `getAllAnswersWithUsernames`.
+>
+> `startTimer`/`stopTimer` remain unused **on purpose** — they're the mechanism for T3's
+> remainder (moving the countdown off the host's browser). Delete them only if that gets
+> abandoned.
 
 `GameState.startTimer`/`stopTimer`/`timerInterval` are fully implemented and never
 called from anywhere — the authoritative countdown lives in the host's browser
@@ -597,7 +614,28 @@ and adopting `sendToUserSockets` removes most of CNG-023's bulk.
 
 ### CNG-023
 **~700 lines of duplicated phase-transition logic**
-Low · Open · `src/socketHandlers.ts:653-1657`
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:653-1657`
+
+> Re-rated Low → High before fixing. It was filed as hygiene, but by the end of the day
+> it had been the direct cause of CNG-004 (one copy inverted), CNG-025 (one copy didn't
+> reset), CNG-014 (copies omitting `targetPlayer`) and the shuffle drift. It wasn't
+> untidiness, it was a bug generator.
+>
+> Fixed: one method per transition — `beginAnsweringRound`, `restartRound`,
+> `beginLieRound`, `beginVoting`, `showLieResults`, `advanceToNextLieRoundOrEnd`,
+> `endGameShowingWinner`, `buildResults`. Every call site now delegates. `timerExpired`
+> went from 514 lines to ~70 and reads as three cases. `socketHandlers.ts` 1696 → 1174
+> lines, `GameState.ts` lost four different variants of the same lie-target scan
+> (`getNextLieTargetPlayer`, `nextLieTarget`, `hasMoreLieTargets`, `isLiePhaseDone`) —
+> leaving those is the trap that started all this, since the next caller picks the wrong
+> one.
+>
+> Also removed the `gameState['userAnswers']` / `['lies']` / `['votes']` private
+> reach-arounds in `sendPlayerToCorrectScreen` in favour of the public getters. That
+> function bypassing the class is how CNG-024's missing target check hid in plain sight.
+>
+> Verified: all 8 suites green, including a new full-game end-to-end
+> (`verify_fullgame.js`) that plays host + 3 players through every round to the winner.
 
 The truths→lies transition is written out three times (`:683-730`, `:1138-1180`,
 `:1226-1268`), lies→voting twice (`:774-829`, `:1274-1321`), voting→results twice

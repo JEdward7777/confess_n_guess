@@ -12,53 +12,49 @@ Written alongside the 2026-07-15 sweep; five tasks landed the same day (see Done
 - **T4** — lie round un-inverted in the skip path (CNG-004, part of -014). `808f39d`
 - **T5** — full state serialization + idle sweep (CNG-002, -016). `c494f4c`
 - **T13** — assigned questions stored server-side (CNG-006). `318dae1`
-- **T3 (correctness half)** — timer cascade + blind timeouts (CNG-003, -011, -025).
+- **T3 (correctness half)** — timer cascade + blind timeouts (CNG-003, -011, -025). `1e8912f`
+- **T6** — one method per transition; -520 lines (CNG-023, -010, -013, -014, part of -022).
 
 Every one was verified against a running server, not just compiled. Scripts live in
 the session scratchpad and should be folded into T8.
 
 ## Now
 
-### T6 — Collapse the duplicated transitions
-Closes **CNG-023**, **CNG-013**, rest of **CNG-014**; retires the rest of **CNG-022**.
-
-Now the highest-value item: it's the disease behind several of the fixes already made.
-Truths→lies is written out three times, lies→voting twice, voting→results twice, and
-they have already drifted — one shuffles the reveal, another doesn't, so whether the
-reveal order is randomised depends on whether the timer expired. CNG-004 (roles
-inverted) and CNG-025 (restart not resetting) were both single copies that drifted from
-their siblings. Every fix here risks missing a path until this is one method per
-transition.
-
-Extract one method per transition. Fold the remaining hand-inlined socket loops into
-`sendToUserSockets`. Make every emit carry its own `targetPlayer` instead of relying on
-the client's merge leaving a stale one (`:809`, `:1302` still don't).
-
-Doing this first also makes T3's remainder nearly free — there'd be one place to start
-a server-side timer instead of eight.
-
-## Next
-
 ### T7 — Server-side identity
 Closes **CNG-009**, **CNG-008**, **CNG-019**, **CNG-012**, **CNG-020**.
 
-Keep a `socketId → {code, name}` map; read the actor from it instead of from the
-event payload. Mint a per-player token at first join and require it to reclaim a
-name — that's what makes reconnect work without letting a second person type "Alice"
-and take over Alice's identity. Mint a host token at `newGame`. Make `addLie`/
-`addVote` upsert by username, and reject self-votes server-side.
+The last structural root cause, and now the largest thing left. Handlers still take the
+actor's `name` from the event payload and act on it without checking it against the
+socket it arrived on, so any client can answer, lie or vote as anyone else — and anyone
+typing an existing name is merged onto that player's identity and starts receiving their
+screens.
 
-Note the constraint from `todo.txt`: reclaiming a name after falling out of a game
-must keep working. Token-on-reclaim preserves that; simply rejecting duplicates
-would not.
+Keep a `socketId → {code, name}` map; read the actor from it instead of the payload.
+Mint a per-player token at first join and require it to reclaim a name. Mint a host token
+at `newGame` (today `identify` accepts `role: 'host'` for any code from anyone, which
+also leaks every answer before the reveal). Make `addLie`/`addVote` upsert by username
+(CNG-012), and reject self-votes server-side (CNG-020).
 
-### T8 — Integration test for a full round
+Constraint from `todo.txt`: reclaiming a name after falling out of a game must keep
+working — that's why it's token-on-reclaim rather than simply rejecting duplicates.
+
+T6 landed first, so there's now one place per transition to thread identity through.
+
+## Next
+
+### T8 — Land the verification scripts as a test suite
 Closes **CNG-021**.
 
-Drive one host and three players through a full round with socket.io-client, with a
-refresh in the middle. Would have caught CNG-001, -003, -004, -005 and -013 without a
-human. Everything above is currently verified by hand across four browser tabs, which
-is why regressions keep landing.
+**Most of the work is already done and is being thrown away every session.** Eight
+scripts now exist that drive real sockets: `verify_fullgame` (host + 3 players through
+every round to the winner), plus one each for CNG-001/002/003/004/005/006. They live in
+the session scratchpad, which is the wrong place — they should be in the repo behind
+`npm test`.
+
+Needed: move them in, give them a runner that starts a server on a spare port and tears
+it down, and make the two-phase restart test (`verify_cng002`) work under it. They found
+CNG-024 and CNG-025 unaided; every regression they'd catch is one that currently reaches
+a live game.
 
 ## Backlog
 

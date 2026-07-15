@@ -269,3 +269,49 @@ shape — a stale server on the port serving an old build, and a `cd` that persi
 `npx tsc`/`npm run build_server` ran in the scratchpad and silently didn't rebuild.
 Always rebuild from the repo root and confirm the guard you just wrote is actually in
 `dist/` before believing a result.
+
+---
+
+## 2026-07-15 — T6: one method per transition (CNG-023, -010, -013, -014, part of -022)
+
+**Done.** Extracted `beginAnsweringRound`, `restartRound`, `beginLieRound`,
+`beginVoting`, `showLieResults`, `advanceToNextLieRoundOrEnd`, `endGameShowingWinner`,
+`buildResults`. Every call site delegates. `timerExpired` went from **514 lines to ~70**
+and now reads as three cases; `socketHandlers.ts` 1696 → 1174, `GameState.ts` 553 → 529.
+
+**I re-rated CNG-023 from Low to High before doing it.** I originally filed it as
+hygiene. That was wrong, and the day proved it: CNG-004 (one copy inverted), CNG-025 (one
+copy didn't reset), CNG-014 (copies omitting `targetPlayer`) and the shuffle drift were
+all single copies falling out of step with their siblings. It was a bug generator, not
+untidiness.
+
+Folded in along the way:
+- **CNG-010** — `startGame` now calls `resetForNewGame()`. Points/users deliberately left
+  alone: `startGame` only runs from `CollectingUsers`, only reachable on a fresh game, so
+  resetting them would be dead code pretending to be a safeguard.
+- **CNG-013** — `nextRound` broadcast every player's question to everyone via
+  `sendToPlayers`; it now targets each player.
+- **CNG-014** — fully closed; both `beginLieRound` and `beginVoting` carry `targetPlayer`
+  explicitly, so nothing depends on the client's merge any more.
+- Removed four variants of the same lie-target scan (`getNextLieTargetPlayer`,
+  `nextLieTarget`, `hasMoreLieTargets`, `isLiePhaseDone`). Leaving those is the exact
+  trap that caused this: the next caller picks the wrong one.
+- Replaced the `gameState['userAnswers']`/`['lies']`/`['votes']` private reach-arounds
+  with public getters. That function bypassing the class is how CNG-024's missing target
+  check hid in plain sight.
+- `startTimer`/`stopTimer` kept unused **on purpose** — they're the mechanism for T3's
+  remainder. Noted in ISSUES so nobody "cleans up" the thing the plan depends on.
+
+**Deliberately NOT unified:** `endGame` sends players `c2` while `continueFromScores`
+sends `h6`. Tidying that would make the CNG-001 regression test vacuous — it proves the
+host is excluded from player-only broadcasts by checking they land on *different*
+screens. Consistency isn't worth blinding the guard.
+
+**Verified:** all 8 suites green, including a new **full-game end-to-end**
+(`verify_fullgame.js`): host + 3 players, every player gets exactly one round, ballots
+have 1 truth + 2 lies, reveal reaches everyone, final leaderboard 4000 each (2000 as
+target + 2000 as voter). This is the T8 seed and should land in the repo next — it is
+currently being thrown away every session.
+
+**Next: T7 (server-side identity)** — the last structural root cause. Handlers still
+trust the `name` in the payload.
