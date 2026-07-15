@@ -124,3 +124,41 @@ test was talking to an old build. `kill $SRV` had killed the wrapping subshell a
 left `node` alive. When starting a server for verification, check it actually bound
 the port and confirm the old one is gone — `pgrep -af dist/index.js` — before trusting
 a result. Ironically the orphan gave a clean pre-fix baseline.
+
+---
+
+## 2026-07-15 — T2: reconnect resyncs from the server (CNG-005, -007, -018, -024)
+
+**Done.** The reported bug — "refresh and people swap roles / end up on the wrong
+screen" — is now fixed at its source.
+
+- `identify` ends by calling `sendPlayerToCorrectScreen`/`sendHostToCorrectScreen`
+  instead of just registering the socket id. It also rejoins the socket to the room
+  (a socket after a refresh isn't in it), which alone was enough to make a refreshed
+  client miss every subsequent broadcast.
+- Unknown game → back to g1 with an error. A name the game has never heard of → c1 to
+  pick a name, rather than resyncing a player that doesn't exist.
+- `App.tsx` routes `name === '<host>'` to the host screen. The host's URL carries
+  `name=<host>`, so a refreshing host was being shown the *player* name-entry screen;
+  with localStorage empty they could type a name and turn the host into a player.
+- The client identifies on `connect` rather than waiting to be asked, closing the race
+  where a fast connection delivered `identifyMe` before React attached the listener
+  and it was dropped forever (CNG-018).
+- `localStorage` is now only a placeholder for the moment before the server answers,
+  and can never overwrite server state.
+
+**Verified:** 13 scenarios across every phase — host and player, answered and not,
+target and non-target, dead code, unknown name. All pass. `scratchpad/verify_cng005.js`.
+
+**The verification earned its keep: it found CNG-024.** The lie target was being handed
+a ballot for their own round on resync — `sendPlayerToCorrectScreen`'s voting branch
+checked "have you voted?" but never "are you the target?", though the branch directly
+above it does exactly that check. The target could vote for their own truth for 1000
+points. Latent before today (resync only ran on a mis-phased submission); wiring resync
+into reconnect made it reachable by refreshing during a vote. Fixed here.
+
+That is a good argument for T8: reading found 23 issues, but *running* the thing found
+the 24th in minutes.
+
+**Still open from the original five:** CNG-002 (restart corrupts saved games) and
+CNG-003/CNG-004 (timer cascade, inverted lie round). Those are next.

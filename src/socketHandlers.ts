@@ -309,7 +309,12 @@ export class SocketHandlers {
                 
             case GamePhase.VotingOnLies:
                 const userVotes = gameState['votes'] as any;
-                if (userVotes && userVotes[targetPlayer]?.some((v: any) => v.voter === playerName)) {
+                if (targetPlayer === playerName) {
+                    // The round is about them - they know the answer and must not vote.
+                    // Every other path excludes the target here; this one didn't (CNG-024).
+                    screenToSend = Screens.c2WaitingScreenJustWhateverText;
+                    textToSend = 'Others are voting on your question!';
+                } else if (userVotes && userVotes[targetPlayer]?.some((v: any) => v.voter === playerName)) {
                     screenToSend = Screens.c2WaitingScreenJustWhateverText;
                     textToSend = 'Your vote has been submitted! Please wait for others...';
                 } else {
@@ -493,30 +498,67 @@ export class SocketHandlers {
             }
         });
 
-        // Client identifies themselves as host or player after joining
+        // Client identifies themselves as host or player after joining.
+        // This is the reconnect path: a refreshed page lands here, so it must end by
+        // telling the client where the game actually is. Leaving it to the client to
+        // restore its own last screen from localStorage is what stranded refreshing
+        // players on dead screens (CNG-005).
         socket.on('identify', ({ role, code, name }: { role: 'host' | 'player', code: string, name?: string }) => {
             code = normalizeCode(code);
+
+            const gameState = this.games[code];
+            if (!gameState) {
+                console.log('identify for unknown game ' + code + ' - sending client back to the start');
+                socket.emit('gameState', {
+                    screen: Screens.g1NewGame,
+                    error: 'That game no longer exists',
+                    name: '',
+                    emoji: '',
+                    sharedState: { users: {}, code }
+                });
+                return;
+            }
+
             // Initialize socket tracking if not exists
             if (!this.socketStuff[code]) {
                 this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
             }
-            
-         if (role === 'host') {
-                 // Only add if not already present in the list
-                 if (!this.socketStuff[code].hostSocketIds.includes(socket.id)) {
-                     this.socketStuff[code].hostSocketIds.push(socket.id);
-                 }
-                 console.log('>>> HOST IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
-             } else if (role === 'player' && name) {
-                 if (!this.socketStuff[code].playerSockets[name]) {
-                     this.socketStuff[code].playerSockets[name] = [];
-                 }
-                 // Only add if not already present
-                 if (!this.socketStuff[code].playerSockets[name].includes(socket.id)) {
-                     this.socketStuff[code].playerSockets[name].push(socket.id);
-                 }
-                 console.log('>>> PLAYER ' + name + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
-             }
+
+            // Rejoin the room - a new socket after a refresh is not in it yet.
+            socket.join(code);
+
+            if (role === 'host') {
+                // Only add if not already present in the list
+                if (!this.socketStuff[code].hostSocketIds.includes(socket.id)) {
+                    this.socketStuff[code].hostSocketIds.push(socket.id);
+                }
+                console.log('>>> HOST IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+                this.sendHostToCorrectScreen(code, gameState, socket);
+            } else if (role === 'player' && name) {
+                if (!gameState.userExists(name)) {
+                    // Their name is gone (server restarted, or a fresh game reused the
+                    // code). Send them to pick a name rather than resyncing a player
+                    // the game has never heard of.
+                    console.log('identify for unknown player ' + name + ' in game ' + code);
+                    socket.emit('gameState', {
+                        screen: Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture,
+                        name: '',
+                        emoji: '',
+                        sharedState: gameState.getSharedState()
+                    });
+                    return;
+                }
+
+                if (!this.socketStuff[code].playerSockets[name]) {
+                    this.socketStuff[code].playerSockets[name] = [];
+                }
+                // Only add if not already present
+                if (!this.socketStuff[code].playerSockets[name].includes(socket.id)) {
+                    this.socketStuff[code].playerSockets[name].push(socket.id);
+                }
+                console.log('>>> PLAYER ' + name + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+                this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+            }
         });
 
         socket.on('nameAndEmoji', ({ name, emoji, code }: { name: string; emoji: string; code: string }) => {

@@ -24,7 +24,17 @@ function App() {
   const showNewGame = urlParams.get('new') === '1';
   const joinCode = urlParams.get('code');
   const joinName = urlParams.get('name'); // Get name from URL for reconnection
-  
+
+  // Where to start before the server tells us where we really are. The host's URL
+  // carries name=<host>, so without this check a refreshing host lands on the player
+  // name-entry screen and can type a name and become a player (CNG-007).
+  function initialScreen(): Screens {
+    if (showNewGame) return Screens.g1NewGame;
+    if (!joinCode) return Screens.g1NewGame;
+    if (joinName === '<host>') return Screens.h1CollectingUsers;
+    return Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture;
+  }
+
   //have a state representing what screen we are on.
   const [gameState, _setGameState] = useState<ClientGameState>({
     sharedState: {
@@ -33,31 +43,43 @@ function App() {
     },
     name: joinName || "", // Use name from URL if available
     emoji: "",
-    screen : showNewGame ? Screens.g1NewGame : (joinCode ? Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture : Screens.g1NewGame),
+    screen : initialScreen(),
     error: "",
   });
   const gameStateRef = useRef<ClientGameState>( gameState );
+  // Once the server has told us where we are, its word beats anything cached locally.
+  const hasServerState = useRef<boolean>(false);
   
-  // Listen for server asking us to identify
+  // Tell the server who we are. The server replies by sending us to the right screen,
+  // so this is what makes a refresh land in the right place.
   useEffect(() => {
-    function onIdentifyMe() {
+    function identify() {
       const code = gameStateRef.current?.sharedState?.code;
       const name = gameStateRef.current?.name;
       const isHost = name === '<host>';
-      
-      if (code) {
-        console.log('>>> IDENTIFYING as ' + (isHost ? 'host' : 'player') + ' for game ' + code);
-        socket.emit('identify', { 
-          role: isHost ? 'host' : 'player', 
-          code, 
-          name: isHost ? undefined : name 
-        });
-      }
+
+      // A player with no name yet has nothing to identify as - they'll register via
+      // nameAndEmoji instead.
+      if (!code || (!isHost && !name)) return;
+
+      console.log('>>> IDENTIFYING as ' + (isHost ? 'host' : 'player') + ' for game ' + code);
+      socket.emit('identify', {
+        role: isHost ? 'host' : 'player',
+        code,
+        name: isHost ? undefined : name
+      });
     }
-    
-    socket.on('identifyMe', onIdentifyMe);
+
+    // Identify on connect rather than waiting to be asked. The socket is created at
+    // module load, before this effect runs, so a fast connection can deliver
+    // 'identifyMe' before the listener exists and it is then lost forever (CNG-018).
+    // Covers reconnects too, since socket.io re-fires 'connect'.
+    if (socket.connected) identify();
+    socket.on('connect', identify);
+    socket.on('identifyMe', identify);
     return () => {
-      socket.off('identifyMe', onIdentifyMe);
+      socket.off('connect', identify);
+      socket.off('identifyMe', identify);
     };
   }, []);
 
@@ -73,9 +95,10 @@ function App() {
   useEffect(() => {
     function onGameStateChange(newState: ClientGameState) {
       console.log( "onGameStateChange", newState );
+      hasServerState.current = true;
       setGameState(newState);
     }
-    
+
     socket.on('gameState', onGameStateChange);
     return () => {
       socket.off('gameState', onGameStateChange);
@@ -83,18 +106,27 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Restore the last known screen from localStorage. This is only a placeholder for
+    // the moment before the server answers our identify - the server decides where we
+    // actually belong, so never let this overwrite something it already told us.
+    if (hasServerState.current) return;
+
     // Retrieve game state using game code and name from URL query params
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const name = urlParams.get('name');
-    
+
     if (code && name) {
       // Use gameCode + name as the localStorage key for persistent state
       const storageKey = `gameState-${code}-${name}`;
       const savedStateString = localStorage.getItem(storageKey);
       if (savedStateString) {
-        const savedState = JSON.parse(savedStateString);
-        setGameState(savedState);
+        try {
+          setGameState(JSON.parse(savedStateString));
+        } catch {
+          // Corrupt entry - drop it and wait for the server.
+          localStorage.removeItem(storageKey);
+        }
       }
     }
   }, []);

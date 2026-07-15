@@ -13,9 +13,9 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-002](#cng-002) | Critical | Open | Saved games drop answers/lies/votes — every game resumes corrupt after a restart |
 | [CNG-003](#cng-003) | Critical | Open | Duplicate `timerExpired` cascades through phases and wrecks the round |
 | [CNG-004](#cng-004) | Critical | Open | Lie-round roles inverted in the skip path — target lies about themselves |
-| [CNG-005](#cng-005) | Critical | Open | Reconnect never resyncs — refreshing leaves you on a stale screen |
+| [CNG-005](#cng-005) | Critical | **Fixed** | Reconnect never resyncs — refreshing leaves you on a stale screen |
 | [CNG-006](#cng-006) | High | **Fixed** | Resync re-rolls the player's question; assignment never stored server-side |
-| [CNG-007](#cng-007) | High | Open | Host refresh lands on the player name-entry screen |
+| [CNG-007](#cng-007) | High | **Fixed** | Host refresh lands on the player name-entry screen |
 | [CNG-008](#cng-008) | High | Open | Duplicate name silently merges two devices into one player |
 | [CNG-009](#cng-009) | High | Open | Server trusts the client-supplied `name` on every event |
 | [CNG-010](#cng-010) | High | Open | `startGame` doesn't clear answers or the question pool |
@@ -26,12 +26,13 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
 | [CNG-016](#cng-016) | Medium | Open | Games are never expired — 37 stale games on disk |
 | [CNG-017](#cng-017) | Medium | Open | H5 auto-continue re-arms forever |
-| [CNG-018](#cng-018) | Medium | Open | `identifyMe` can arrive before the client's listener is attached |
+| [CNG-018](#cng-018) | Medium | **Fixed** | `identifyMe` can arrive before the client's listener is attached |
 | [CNG-019](#cng-019) | Medium | Open | Any client can claim to be the host of any game |
 | [CNG-020](#cng-020) | Low | Open | Self-vote only prevented client-side |
 | [CNG-021](#cng-021) | High | Open | No automated test can reach any of this |
 | [CNG-022](#cng-022) | Low | Open | Dead code: server-side timer, `sendToUserSockets` |
 | [CNG-023](#cng-023) | Low | Open | ~700 lines of duplicated phase-transition logic |
+| [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
 
@@ -195,7 +196,17 @@ flipped. Players here would quite literally have swapped roles.
 
 ### CNG-005
 **Reconnect never resyncs — refreshing leaves you on a stale screen**
-Critical · Open · `src/socketHandlers.ts:499-522`, `confess_n_guess_client/src/App.tsx:85-100`
+Critical · **Fixed 2026-07-15** · `src/socketHandlers.ts:499-522`, `confess_n_guess_client/src/App.tsx:85-100`
+
+> Fixed: `identify` now ends by calling `sendPlayerToCorrectScreen` /
+> `sendHostToCorrectScreen`, and rejoins the socket to the room (a socket after a
+> refresh isn't in it). Unknown game -> back to g1 with an error; a name the game has
+> never heard of -> c1 to pick a name, rather than resyncing a ghost. Client-side,
+> `localStorage` is now only a placeholder for the moment before the server answers
+> and can never overwrite server state (`hasServerState` ref).
+>
+> Verified across 13 scenarios covering every phase — see `scratchpad/verify_cng005.js`.
+> Exposed CNG-024 in the process.
 
 The `identify` handler registers the socket id and returns. It never sends game
 state. So the whole of reconnection rests on the client restoring `localStorage`:
@@ -255,7 +266,12 @@ and have resync read it.
 
 ### CNG-007
 **Host refresh lands on the player name-entry screen**
-High · Open · `confess_n_guess_client/src/App.tsx:23-38`
+High · **Fixed 2026-07-15** · `confess_n_guess_client/src/App.tsx:23-38`
+
+> Fixed: initial screen now routes `name === '<host>'` to `h1CollectingUsers`. With
+> CNG-005 the server corrects it a moment later anyway, but the host must not sit on
+> a name-entry screen even briefly — typing a name there turned the host into a
+> player.
 
 ```ts
 const joinCode = urlParams.get('code');
@@ -441,7 +457,12 @@ fails, `:1035`) the host silently re-emits every 60 seconds forever.
 
 ### CNG-018
 **`identifyMe` can arrive before the client's listener is attached**
-Medium · Open · `confess_n_guess_client/src/socket.js:6`, `App.tsx:42-62`
+Medium · **Fixed 2026-07-15** · `confess_n_guess_client/src/socket.js:6`, `App.tsx:42-62`
+
+> Fixed: the client now identifies on `connect` (and if already connected at mount)
+> rather than only when asked. The server's `identifyMe` is still honoured, so the
+> two are belt and braces. Also covers reconnects, since socket.io re-fires
+> `connect`.
 
 `socket.js` opens the connection at module-evaluation time; the `identifyMe` listener
 is attached in a `useEffect`, which runs after mount. Socket.IO does not buffer
@@ -518,3 +539,32 @@ depends on whether the timer expired. CNG-004's inversion is the same disease.
 
 Each transition should exist once, as a method. This is why fixes here keep missing
 a path.
+
+---
+
+### CNG-024
+**Lie target is handed a ballot for their own round on resync**
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:310-326`
+
+`sendPlayerToCorrectScreen`'s `VotingOnLies` branch checked whether the player had
+already voted, but never whether they are the *target* of the round:
+
+```ts
+case GamePhase.VotingOnLies:
+    if (userVotes && userVotes[targetPlayer]?.some(v => v.voter === playerName)) {
+        → c2 waiting
+    } else {
+        → c4 vote        // ← the target lands here too
+    }
+```
+
+The target knows their own truth, so they must never vote — every other path
+correctly excludes them (`submitLie` at `:803`, and the `SubmittingLies` branch
+directly above this one checks `targetPlayer === playerName`). Only this branch was
+missed. The target could vote for their own answer and collect 1000 points; nothing
+server-side stops it (see CNG-020).
+
+Latent before CNG-005 was fixed, because resync only ran when a submission arrived at
+the wrong phase. Wiring resync into reconnect made it reachable by simply refreshing
+during a vote — which is exactly the reported "refresh and things go weird". Found by
+the CNG-005 verification, not by reading.
