@@ -1240,35 +1240,34 @@ class SocketHandlers {
                             gameState.nextLieTarget();
                             const nextTargetPlayer = gameState.getCurrentLieTargetPlayer();
                             if (nextTargetPlayer) {
+                                const nextTruth = gameState.getTruthForPlayer(nextTargetPlayer);
+                                // Set the timer so the new round has one, and so the host's
+                                // countdown restarts rather than inheriting the expired one.
+                                gameState.setTimerValue(60);
                                 // Send host to next round
                                 this.sendToHost(code, {
                                     screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
-                                    text: nextTargetPlayer + ' - submit your lies!',
+                                    text: 'Now submitting lies for ' + nextTargetPlayer + '!',
                                     timerValue: 60
                                 });
-                                // Send lie submission to next target (to all their sockets)
-                                const nextTruth = gameState.getTruthForPlayer(nextTargetPlayer);
-                                const socketInfo = this.socketStuff[code];
-                                if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[nextTargetPlayer]) {
-                                    const socketIds = socketInfo.playerSockets[nextTargetPlayer];
-                                    socketIds.forEach(socketId => {
-                                        this.io.to(socketId).emit('gameState', {
-                                            screen: IncludeStuff_1.Screens.c5SubmitLie,
-                                            text: nextTruth ? `Write a LIE for this question about ${nextTargetPlayer}:\n\n${nextTruth.question}` : 'No question available',
-                                            question: nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question,
-                                            instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
+                                // Everyone EXCEPT the target writes a lie about the target;
+                                // the target waits. This path had the two swapped: it asked
+                                // the target to lie about themselves and told everyone else
+                                // to wait (CNG-004).
+                                gameState.getUserNames().forEach(username => {
+                                    if (username === nextTargetPlayer) {
+                                        this.sendToUserSockets(code, username, 'gameState', {
+                                            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+                                            text: 'Your truth has been submitted! Now others will submit lies for your question.'
                                         });
-                                    });
-                                }
-                                // Send waiting to others (to all their sockets)
-                                userNames.forEach(username => {
-                                    if (username !== nextTargetPlayer && socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                        const socketIds = socketInfo.playerSockets[username];
-                                        socketIds.forEach(socketId => {
-                                            this.io.to(socketId).emit('gameState', {
-                                                screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
-                                                text: nextTargetPlayer + ' is writing a lie! Wait for your turn...'
-                                            });
+                                    }
+                                    else {
+                                        this.sendToUserSockets(code, username, 'gameState', {
+                                            screen: IncludeStuff_1.Screens.c5SubmitLie,
+                                            text: 'Write a LIE for this question about ' + nextTargetPlayer + ':\n\n' + ((nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || ''),
+                                            question: (nextTruth === null || nextTruth === void 0 ? void 0 : nextTruth.question) || '',
+                                            targetPlayer: nextTargetPlayer,
+                                            instructionText: `Write a fooling answer for this question about ${nextTargetPlayer}`
                                         });
                                     }
                                 });

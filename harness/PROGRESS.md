@@ -190,3 +190,30 @@ correct — none of them were resumable.
 lie round). Both live in the `timerExpired` handler, and both are really symptoms of
 CNG-023 (the transition logic is copy-pasted 3x and has drifted). Worth doing T3/T4
 together with an eye to T6 rather than patching each copy.
+
+---
+
+## 2026-07-15 — T4: un-invert the lie round (CNG-004, part of CNG-014)
+
+**Done.** In the skip-to-next-target path, everyone except the target now writes the
+lie and the target waits. It had the two exactly swapped — the target was asked to
+write a lie about themselves while everyone else was told "X is writing a lie, wait
+your turn".
+
+Rewrote it through `sendToUserSockets` — which was already written and never called —
+rather than adding a fourth hand-rolled socket loop. The emit now carries
+`targetPlayer` (CNG-014 on this path) and sets the timer so the host's countdown
+restarts instead of inheriting the expired one.
+
+**Verified** by driving the real path: complete round 1, then let the lie timer expire
+with zero lies for a non-first target. Target waits, other two get c5, the emit carries
+the new target, round completes into voting. `scratchpad/verify_cng004.js`.
+
+**Also:** `/CLAUDE.md` reduced to a pointer at the user's request. The working rules,
+build/run notes and codebase notes now live in `harness/README.md` only, so there's one
+copy to keep true rather than two to drift apart.
+
+**Remaining critical: CNG-003** (browser-owned timer + a guard that admits three
+phases, so two `timerExpired` events cascade). That one is worth doing properly —
+moving the countdown server-side via the unused `GameState.startTimer` — rather than
+patching the guard. It is also entangled with CNG-011 and CNG-023.

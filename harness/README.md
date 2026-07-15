@@ -3,6 +3,9 @@
 A lightweight tracking system so work on this project can be directed, resumed, and
 verified without re-deriving context every session.
 
+`/CLAUDE.md` only points here. This file is the authoritative copy of the working
+rules — put them here, not there.
+
 ## Files
 
 | File | Purpose |
@@ -14,14 +17,18 @@ verified without re-deriving context every session.
 ## Rule: check in after each unit of work
 
 **After completing a meaningful unit of work, commit it — without being asked.**
-This rule is restated in `/CLAUDE.md`, which is the copy that actually gets loaded
-into an agent's context automatically. Keep the two in sync.
 
 A "unit of work" is one coherent change that leaves the tree in a working state,
-typically one task from `TASKS.md` or one issue fixed. Each check-in: typecheck both
-roots, update the issue status here and append to `PROGRESS.md`, then commit code and
-harness together referencing the issue id. One fix per commit — the point is that a
-bad change can be reverted on its own.
+typically one task from `TASKS.md` or one issue fixed. Each check-in:
+
+1. `npx tsc --noEmit` in the repo root **and** in `confess_n_guess_client/` — both
+   must pass.
+2. Update the issue's status in `ISSUES.md` and append to `PROGRESS.md`.
+3. Commit the code and the harness update together, referencing the issue id
+   (e.g. `Fix host receiving player screens (CNG-001)`).
+
+One fix per commit — the point is that a bad change can be found and reverted on its
+own. Don't commit generated state (`games.json`) or build logs.
 
 ## How to use it
 
@@ -50,16 +57,45 @@ not just compiled.
 - **Medium** — wrong but recoverable, or only hit in edge cases
 - **Low** — cleanup, dead code, hygiene
 
+## Build and run
+
+    npm run build          # client then server — MUST rebuild after editing src/
+    npm start              # server on :3001, serves the built client
+
+    cd confess_n_guess_client && npm run dev    # client with hot reload
+
+`dist/` is committed build output and `npm start` runs `dist/index.js` — **edits to
+`src/` have no effect until `npm run build_server`.** This has bitten before.
+
 ## Verification protocol
 
-This project has no tests and no automated checks beyond `npx tsc --noEmit`.
-Until that changes, "verified" means: run the server, open a host screen and at
-least three player tabs, and play the specific path the fix touches — including a
-mid-game refresh of both a player and the host.
+There are no tests (`npm test` is a stub that exits 1 — CNG-021). "Verified" means
+running the server and driving the affected path, **including a mid-game refresh of
+both a player and the host** — that's where the bugs in this codebase live. Either
+hand-drive a host plus three player tabs, or drive real sockets from a script.
 
-    npm run build && npm start        # server on :3001
-    cd confess_n_guess_client && npm run dev   # client dev server
+Scripted verification has worked well and is much faster than four browser tabs; the
+scripts written so far are noted in `PROGRESS.md`. Folding them into a real test suite
+is T8/CNG-021, and is the highest-leverage remaining item — reading found 23 issues,
+but *running* the thing found CNG-024 in minutes.
 
-The single highest-leverage thing that would make this harness stronger is an
-automated multi-client integration test driving socket.io clients through a full
-round. See CNG-021.
+When starting a server to verify against, **confirm it actually bound the port** and
+that no earlier one is still holding it (`pgrep -af '[d]ist/index.js'`). An orphaned
+server from a previous run silently serves the old build and produces false results.
+Note `pkill -f` will match your own shell if the pattern appears in the command line.
+
+## Things to know about this codebase
+
+- **Game state must survive a server restart.** This is deliberate: it allows
+  hot-patching code mid-game while debugging without replaying a trace from the
+  start. `GameState.toJSON`/`fromJSON` must serialize *everything* a round needs, and
+  `SAVE_VERSION` must be bumped when old saves stop being readable.
+- `games.json` is runtime state written to the CWD. It is gitignored — that does not
+  stop it saving, it just keeps churn out of commits.
+- Identity is currently client-asserted: handlers trust the `name` in the event
+  payload. This is the root cause of most reconnection bugs (CNG-009). Prefer fixes
+  that move identity server-side.
+- The phase countdown currently runs in the *host's browser*, not the server
+  (CNG-003). `GameState.startTimer` exists and is unused.
+- The phase-transition logic is copy-pasted several times over and has already
+  drifted apart (CNG-023). If you're fixing one copy, check the others.

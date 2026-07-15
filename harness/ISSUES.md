@@ -12,7 +12,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-001](#cng-001) | Critical | **Fixed** | `sendToPlayers` never excludes the host — host device gets player screens |
 | [CNG-002](#cng-002) | Critical | **Fixed** | Saved games drop answers/lies/votes — every game resumes corrupt after a restart |
 | [CNG-003](#cng-003) | Critical | Open | Duplicate `timerExpired` cascades through phases and wrecks the round |
-| [CNG-004](#cng-004) | Critical | Open | Lie-round roles inverted in the skip path — target lies about themselves |
+| [CNG-004](#cng-004) | Critical | **Fixed** | Lie-round roles inverted in the skip path — target lies about themselves |
 | [CNG-005](#cng-005) | Critical | **Fixed** | Reconnect never resyncs — refreshing leaves you on a stale screen |
 | [CNG-006](#cng-006) | High | **Fixed** | Resync re-rolls the player's question; assignment never stored server-side |
 | [CNG-007](#cng-007) | High | **Fixed** | Host refresh lands on the player name-entry screen |
@@ -22,7 +22,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-011](#cng-011) | High | Open | Blind `setTimeout` chain advances the game behind the host's back |
 | [CNG-012](#cng-012) | High | Open | `addLie`/`addVote` don't dedupe — duplicate entries and double points |
 | [CNG-013](#cng-013) | Medium | Open | `nextRound` broadcasts every question to every player |
-| [CNG-014](#cng-014) | Medium | Open | Skip path omits `targetPlayer`, client submits against a stale target |
+| [CNG-014](#cng-014) | Medium | Partly fixed | Skip path omits `targetPlayer`, client submits against a stale target |
 | [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
 | [CNG-016](#cng-016) | Medium | **Fixed** | Games are never expired — 37 stale games on disk |
 | [CNG-017](#cng-017) | Medium | Open | H5 auto-continue re-arms forever |
@@ -184,7 +184,18 @@ token the server can check, or — better — the server should own the timer
 
 ### CNG-004
 **Lie-round roles inverted in the skip path — target lies about themselves**
-Critical · Open · `src/socketHandlers.ts:1382-1416`
+Critical · **Fixed 2026-07-15** · `src/socketHandlers.ts:1382-1416`
+
+> Fixed: everyone except the target now writes the lie; the target waits. Rewritten
+> through `sendToUserSockets` (which was already written and unused) so it reads like
+> the other transitions instead of being a fourth hand-rolled copy. The emit now
+> carries `targetPlayer`, fixing CNG-014 on this path, and sets the timer so the host's
+> countdown restarts rather than inheriting the expired one.
+>
+> Verified by driving the real path — complete round 1, let the lie timer expire with
+> zero lies for a non-first target — and asserting the target waits, the other two get
+> c5, the emit carries the new target, and the round completes into voting.
+> `scratchpad/verify_cng004.js`.
 
 When the lie timer expires with zero lies for a non-first target, the code advances
 to the next target and then sends the screens out backwards:
@@ -411,7 +422,12 @@ at whichever question was drawn last. (Every other assignment site correctly tar
 
 ### CNG-014
 **Skip path omits `targetPlayer`, client submits against a stale target**
-Medium · Open · `src/socketHandlers.ts:1396-1402`
+Medium · **Partly fixed 2026-07-15** · `src/socketHandlers.ts:1396-1402`
+
+> The `c5SubmitLie` emit in the skip path now carries `targetPlayer` (fixed alongside
+> CNG-004). The two voting emits at `:809` and `:1302` still omit it and still work
+> only by accident, relying on the client's merge leaving the right value behind.
+> Still open for those; fold into T6.
 
 That `c5SubmitLie` emit sends `screen`, `text`, `question`, `instructionText` — but
 no `targetPlayer`. Because `App.setGameState` merges (`{...prev, ...next}`,
