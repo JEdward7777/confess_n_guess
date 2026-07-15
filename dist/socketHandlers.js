@@ -67,12 +67,9 @@ class SocketHandlers {
     sendToPlayers(gameCode, data) {
         const socketInfo = this.socketStuff[gameCode];
         if (socketInfo && socketInfo.hostSocketIds && socketInfo.hostSocketIds.length > 0) {
-            // Send to all except host sockets - use except for each host socket
-            const room = this.io.in(gameCode);
-            socketInfo.hostSocketIds.forEach(hostSocketId => {
-                room.except(hostSocketId);
-            });
-            room.emit('gameState', data);
+            // except() returns a new operator rather than mutating, so the exclusions
+            // must be applied in the same chain that emits. It accepts an array.
+            this.io.in(gameCode).except(socketInfo.hostSocketIds).emit('gameState', data);
         }
         else {
             // Fallback: send to everyone

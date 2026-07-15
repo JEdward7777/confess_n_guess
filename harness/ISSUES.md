@@ -9,7 +9,7 @@ checking library source or on-disk data) — none are speculative unless marked
 
 | id | Sev | Status | Title |
 |---|---|---|---|
-| [CNG-001](#cng-001) | Critical | Open | `sendToPlayers` never excludes the host — host device gets player screens |
+| [CNG-001](#cng-001) | Critical | **Fixed** | `sendToPlayers` never excludes the host — host device gets player screens |
 | [CNG-002](#cng-002) | Critical | Open | Saved games drop answers/lies/votes — every game resumes corrupt after a restart |
 | [CNG-003](#cng-003) | Critical | Open | Duplicate `timerExpired` cascades through phases and wrecks the round |
 | [CNG-004](#cng-004) | Critical | Open | Lie-round roles inverted in the skip path — target lies about themselves |
@@ -62,7 +62,14 @@ host sockets now means two independent countdowns both firing `timerExpired`.
 
 ### CNG-001
 **`sendToPlayers` never excludes the host — host device gets player screens**
-Critical · Open · `src/socketHandlers.ts:89-102`
+Critical · **Fixed 2026-07-15** · `src/socketHandlers.ts:89-102`
+
+> Fixed by applying the exclusions in the same chain that emits:
+> `this.io.in(gameCode).except(socketInfo.hostSocketIds).emit(...)` — `except`
+> takes an array. Verified by driving a real host + 2 players through `endGame`:
+> host now sees `[6]` (winner) where it previously saw `[6, 8]` — overwritten with
+> the player waiting screen. Confirmed the check fails against the pre-fix build, so
+> the verification is real and not vacuous.
 
 ```ts
 const room = this.io.in(gameCode);

@@ -74,3 +74,27 @@ authoritative copy.
 is committed and `npm start` runs it, so `src/` edits do nothing until a rebuild; the
 save-state requirement above; and the two structural root causes (client-asserted
 identity, browser-owned timer).
+
+---
+
+## 2026-07-15 — T1: host no longer receives player screens (CNG-001)
+
+**Done:** `sendToPlayers` now applies its host exclusions in the same chain that
+emits. The old code called `room.except(id)` in a `forEach` and discarded every
+return value; `except()` builds a new operator rather than mutating, so nothing was
+ever excluded and every "players only" broadcast hit the host.
+
+**Verified**, not just compiled. Drove a real host plus two players against a real
+server through `endGame`:
+
+- pre-fix: host screens `[6, 8]` — winner screen, then overwritten with the player
+  waiting screen. Exactly the reported symptom.
+- post-fix: host `[6]`, players `[8]`.
+
+Checked the test against the pre-fix build first and confirmed it fails there, so the
+pass means something. Script kept at `scratchpad/verify_cng001.js` — it is the seed
+of T8 and should be folded in when that lands.
+
+**Note for next session:** `dist/` is tracked and `npm start` runs it, so the built
+output is committed alongside the source. Easy to forget and then wonder why nothing
+changed.
