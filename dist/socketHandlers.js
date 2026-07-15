@@ -248,8 +248,9 @@ class SocketHandlers {
                     textToSend = 'Your answer has been submitted! Please wait for others...';
                 }
                 else {
-                    // Send question to answer
-                    const questionObj = gameState.getNextQuestion();
+                    // The question they were already handed - never draw a new one here,
+                    // this runs on every resync (CNG-006).
+                    const questionObj = gameState.getOrAssignQuestion(playerName);
                     screenToSend = IncludeStuff_1.Screens.c3SubmitTruth;
                     questionText = (questionObj === null || questionObj === void 0 ? void 0 : questionObj.question) || '';
                     instructionText = 'Please answer this question truthfully about yourself';
@@ -551,7 +552,7 @@ class SocketHandlers {
                 // Assign DIFFERENT question to each player
                 userNames.forEach(username => {
                     // Get a unique question for each player
-                    const questionObj = gameState.getNextQuestion();
+                    const questionObj = gameState.assignQuestion(username);
                     if (questionObj) {
                         // Send to specific player using all their sockets (supports multiple devices)
                         const socketInfo = this.socketStuff[code];
@@ -572,6 +573,7 @@ class SocketHandlers {
             }
         });
         socket.on('sendQuestionAnswer', ({ name, code, answer, question }) => {
+            var _a;
             code = normalizeCode(code);
             const gameState = this.games[code];
             if (gameState) {
@@ -582,8 +584,10 @@ class SocketHandlers {
                     return;
                 }
                 console.log('User ' + name + ' answered: ' + answer);
-                // Store the answer
-                gameState.addAnswer(name, question, answer);
+                // Prefer the question the server actually handed out over the one the
+                // client echoed back; fall back only if there's no record.
+                const assigned = gameState.getAssignedQuestion(name);
+                gameState.addAnswer(name, (_a = assigned === null || assigned === void 0 ? void 0 : assigned.question) !== null && _a !== void 0 ? _a : question, answer);
                 // Check if all users have answered
                 if (gameState.allUsersHaveAnswered()) {
                     console.log('ALL PLAYERS HAVE ANSWERED! Transitioning to lie phase.');
@@ -853,7 +857,7 @@ class SocketHandlers {
                 // Assign new questions to each player
                 const userNames = gameState.getUserNames();
                 userNames.forEach(username => {
-                    const questionObj = gameState.getNextQuestion();
+                    const questionObj = gameState.assignQuestion(username);
                     if (questionObj) {
                         this.sendToPlayers(code, {
                             screen: IncludeStuff_1.Screens.c3SubmitTruth,
@@ -1033,7 +1037,7 @@ class SocketHandlers {
                         // Re-send questions to all players
                         const userNames = gameState.getUserNames();
                         userNames.forEach(username => {
-                            const questionObj = gameState.getNextQuestion();
+                            const questionObj = gameState.assignQuestion(username);
                             if (questionObj) {
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
@@ -1172,7 +1176,7 @@ class SocketHandlers {
                                 });
                                 // Re-send questions to all players
                                 allUserNames.forEach(username => {
-                                    const questionObj = gameState.getNextQuestion();
+                                    const questionObj = gameState.assignQuestion(username);
                                     if (questionObj) {
                                         const socketInfo = this.socketStuff[code];
                                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {

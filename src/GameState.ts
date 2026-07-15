@@ -29,6 +29,9 @@ export interface Vote {
 export class GameState {
     private sharedState: SharedState;
     private usedQuestionIndexes: number[];
+    // Which question each player was actually handed. Without this the server has no
+    // record of the assignment and a resync would draw a fresh one (CNG-006).
+    private assignedQuestions: { [username: string]: { question: string; index: number } };
     private userAnswers: { [username: string]: UserAnswer };
     private currentPhase: GamePhase;
     private currentQuestionIndex: number;
@@ -47,6 +50,7 @@ export class GameState {
             code: gameCode
         };
         this.usedQuestionIndexes = [];
+        this.assignedQuestions = {};
         this.userAnswers = {};
         this.currentPhase = GamePhase.CollectingUsers;
         this.currentQuestionIndex = 0;
@@ -178,6 +182,36 @@ export class GameState {
         };
     }
 
+    /**
+     * Draw a question for a player and remember it. Replaces any previous assignment,
+     * so call this once per player per round.
+     */
+    assignQuestion(username: string): { question: string; index: number } | null {
+        const questionObj = this.getNextQuestion();
+        if (questionObj) {
+            this.assignedQuestions[username] = questionObj;
+        }
+        return questionObj;
+    }
+
+    /** What this player was handed, or null if they haven't been assigned one. */
+    getAssignedQuestion(username: string): { question: string; index: number } | null {
+        return this.assignedQuestions[username] || null;
+    }
+
+    /**
+     * The player's existing question, drawing one only if they have none. Resyncs must
+     * use this: getNextQuestion() mutates, so calling it on reconnect would hand the
+     * player a different question and burn the pool (CNG-006).
+     */
+    getOrAssignQuestion(username: string): { question: string; index: number } | null {
+        return this.assignedQuestions[username] || this.assignQuestion(username);
+    }
+
+    clearAssignedQuestions(): void {
+        this.assignedQuestions = {};
+    }
+
     // Answer management
     addAnswer(username: string, question: string, answer: string): void {
         this.userAnswers[username] = {
@@ -198,8 +232,11 @@ export class GameState {
         }));
     }
 
+    // Clears a round's Q&A. Assignments go with the answers - every caller restarts the
+    // round and reassigns immediately, so a stale assignment must not survive.
     clearAnswers(): void {
         this.userAnswers = {};
+        this.assignedQuestions = {};
     }
 
     // Phase management

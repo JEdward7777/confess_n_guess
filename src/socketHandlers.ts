@@ -278,8 +278,9 @@ export class SocketHandlers {
                     screenToSend = Screens.c2WaitingScreenJustWhateverText;
                     textToSend = 'Your answer has been submitted! Please wait for others...';
                 } else {
-                    // Send question to answer
-                    const questionObj = gameState.getNextQuestion();
+                    // The question they were already handed - never draw a new one here,
+                    // this runs on every resync (CNG-006).
+                    const questionObj = gameState.getOrAssignQuestion(playerName);
                     screenToSend = Screens.c3SubmitTruth;
                     questionText = questionObj?.question || '';
                     instructionText = 'Please answer this question truthfully about yourself';
@@ -626,7 +627,7 @@ export class SocketHandlers {
                 // Assign DIFFERENT question to each player
                 userNames.forEach(username => {
                     // Get a unique question for each player
-                    const questionObj = gameState.getNextQuestion();
+                    const questionObj = gameState.assignQuestion(username);
                     if (questionObj) {
                         // Send to specific player using all their sockets (supports multiple devices)
                         const socketInfo = this.socketStuff[code];
@@ -665,9 +666,11 @@ export class SocketHandlers {
                 }
                 
                 console.log('User ' + name + ' answered: ' + answer);
-                
-                // Store the answer
-                gameState.addAnswer(name, question, answer);
+
+                // Prefer the question the server actually handed out over the one the
+                // client echoed back; fall back only if there's no record.
+                const assigned = gameState.getAssignedQuestion(name);
+                gameState.addAnswer(name, assigned?.question ?? question, answer);
                 
                 // Check if all users have answered
                 if (gameState.allUsersHaveAnswered()) {
@@ -988,7 +991,7 @@ export class SocketHandlers {
                 // Assign new questions to each player
                 const userNames = gameState.getUserNames();
                 userNames.forEach(username => {
-                    const questionObj = gameState.getNextQuestion();
+                    const questionObj = gameState.assignQuestion(username);
                     if (questionObj) {
                         this.sendToPlayers(code, {
                             screen: Screens.c3SubmitTruth,
@@ -1195,7 +1198,7 @@ export class SocketHandlers {
                         // Re-send questions to all players
                         const userNames = gameState.getUserNames();
                         userNames.forEach(username => {
-                            const questionObj = gameState.getNextQuestion();
+                            const questionObj = gameState.assignQuestion(username);
                             if (questionObj) {
                                 const socketInfo = this.socketStuff[code];
                                 if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
@@ -1350,7 +1353,7 @@ export class SocketHandlers {
                                 
                                 // Re-send questions to all players
                                 allUserNames.forEach(username => {
-                                    const questionObj = gameState.getNextQuestion();
+                                    const questionObj = gameState.assignQuestion(username);
                                     if (questionObj) {
                                         const socketInfo = this.socketStuff[code];
                                         if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {

@@ -14,7 +14,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-003](#cng-003) | Critical | Open | Duplicate `timerExpired` cascades through phases and wrecks the round |
 | [CNG-004](#cng-004) | Critical | Open | Lie-round roles inverted in the skip path — target lies about themselves |
 | [CNG-005](#cng-005) | Critical | Open | Reconnect never resyncs — refreshing leaves you on a stale screen |
-| [CNG-006](#cng-006) | High | Open | Resync re-rolls the player's question; assignment never stored server-side |
+| [CNG-006](#cng-006) | High | **Fixed** | Resync re-rolls the player's question; assignment never stored server-side |
 | [CNG-007](#cng-007) | High | Open | Host refresh lands on the player name-entry screen |
 | [CNG-008](#cng-008) | High | Open | Duplicate name silently merges two devices into one player |
 | [CNG-009](#cng-009) | High | Open | Server trusts the client-supplied `name` on every event |
@@ -221,7 +221,18 @@ This is the issue the user described: refresh, and you're somewhere wrong.
 
 ### CNG-006
 **Resync re-rolls the player's question; assignment never stored server-side**
-High · Open · `src/socketHandlers.ts:285`, `src/GameState.ts:162-179`
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:285`, `src/GameState.ts:162-179`
+
+> Fixed by giving `GameState` an `assignedQuestions` map. `assignQuestion()` draws and
+> records; `getOrAssignQuestion()` returns the existing one and only draws if there
+> isn't one, and is what resync calls. `sendQuestionAnswer` now records the question
+> the *server* handed out rather than the one the client echoes back. `clearAnswers()`
+> clears assignments too, since every caller restarts the round and reassigns.
+>
+> Verified: alice refreshes 3x mid-round. Pre-fix she got a different question every
+> time (3 more burned from a 30-question pool); post-fix the same question all 3
+> times. Had to land this before T2 — wiring resync into reconnect without it would
+> have made every refresh re-roll.
 
 In the `AnsweringQuestions` branch of `sendPlayerToCorrectScreen`:
 

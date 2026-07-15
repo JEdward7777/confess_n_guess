@@ -98,3 +98,29 @@ of T8 and should be folded in when that lands.
 **Note for next session:** `dist/` is tracked and `npm start` runs it, so the built
 output is committed alongside the source. Easy to forget and then wonder why nothing
 changed.
+
+---
+
+## 2026-07-15 — Store assigned questions server-side (CNG-006)
+
+**Done:** `GameState` now records which question each player was handed
+(`assignedQuestions`). `assignQuestion()` draws and records; `getOrAssignQuestion()`
+returns what they already have and only draws if there is nothing — resync uses that
+one. `sendQuestionAnswer` now stores the question the server assigned rather than the
+string the client echoes back, so a stale or crafted client can't file an answer
+against a question it invented. `clearAnswers()` clears assignments alongside answers.
+
+**Why now, ahead of T2:** `sendPlayerToCorrectScreen` called `getNextQuestion()`,
+which mutates. Wiring it into reconnect (T2) without fixing this first would have made
+every refresh silently re-roll the player's question and drain a 30-question pool.
+
+**Verified:** alice refreshes 3x mid-round. Pre-fix: 3 different questions, 3 burned
+from the pool. Post-fix: same question all 3 times. Script at
+`scratchpad/verify_cng006.js`.
+
+**Process note — cost me a false result.** A test claimed the fix didn't work; the
+real cause was an orphaned server from the previous run still holding :3199, so the
+test was talking to an old build. `kill $SRV` had killed the wrapping subshell and
+left `node` alive. When starting a server for verification, check it actually bound
+the port and confirm the old one is gone — `pgrep -af dist/index.js` — before trusting
+a result. Ironically the orphan gave a clean pre-fix baseline.

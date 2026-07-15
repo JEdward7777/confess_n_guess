@@ -51,6 +51,7 @@ class GameState {
             code: gameCode
         };
         this.usedQuestionIndexes = [];
+        this.assignedQuestions = {};
         this.userAnswers = {};
         this.currentPhase = GamePhase.CollectingUsers;
         this.currentQuestionIndex = 0;
@@ -128,6 +129,32 @@ class GameState {
             index: actualIndex
         };
     }
+    /**
+     * Draw a question for a player and remember it. Replaces any previous assignment,
+     * so call this once per player per round.
+     */
+    assignQuestion(username) {
+        const questionObj = this.getNextQuestion();
+        if (questionObj) {
+            this.assignedQuestions[username] = questionObj;
+        }
+        return questionObj;
+    }
+    /** What this player was handed, or null if they haven't been assigned one. */
+    getAssignedQuestion(username) {
+        return this.assignedQuestions[username] || null;
+    }
+    /**
+     * The player's existing question, drawing one only if they have none. Resyncs must
+     * use this: getNextQuestion() mutates, so calling it on reconnect would hand the
+     * player a different question and burn the pool (CNG-006).
+     */
+    getOrAssignQuestion(username) {
+        return this.assignedQuestions[username] || this.assignQuestion(username);
+    }
+    clearAssignedQuestions() {
+        this.assignedQuestions = {};
+    }
     // Answer management
     addAnswer(username, question, answer) {
         this.userAnswers[username] = {
@@ -145,8 +172,11 @@ class GameState {
             answer
         }));
     }
+    // Clears a round's Q&A. Assignments go with the answers - every caller restarts the
+    // round and reassigns immediately, so a stale assignment must not survive.
     clearAnswers() {
         this.userAnswers = {};
+        this.assignedQuestions = {};
     }
     // Phase management
     setPhase(phase) {
