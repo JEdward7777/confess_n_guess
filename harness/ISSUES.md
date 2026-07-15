@@ -10,7 +10,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | id | Sev | Status | Title |
 |---|---|---|---|
 | [CNG-001](#cng-001) | Critical | **Fixed** | `sendToPlayers` never excludes the host — host device gets player screens |
-| [CNG-002](#cng-002) | Critical | Open | Saved games drop answers/lies/votes — every game resumes corrupt after a restart |
+| [CNG-002](#cng-002) | Critical | **Fixed** | Saved games drop answers/lies/votes — every game resumes corrupt after a restart |
 | [CNG-003](#cng-003) | Critical | Open | Duplicate `timerExpired` cascades through phases and wrecks the round |
 | [CNG-004](#cng-004) | Critical | Open | Lie-round roles inverted in the skip path — target lies about themselves |
 | [CNG-005](#cng-005) | Critical | **Fixed** | Reconnect never resyncs — refreshing leaves you on a stale screen |
@@ -24,7 +24,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-013](#cng-013) | Medium | Open | `nextRound` broadcasts every question to every player |
 | [CNG-014](#cng-014) | Medium | Open | Skip path omits `targetPlayer`, client submits against a stale target |
 | [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
-| [CNG-016](#cng-016) | Medium | Open | Games are never expired — 37 stale games on disk |
+| [CNG-016](#cng-016) | Medium | **Fixed** | Games are never expired — 37 stale games on disk |
 | [CNG-017](#cng-017) | Medium | Open | H5 auto-continue re-arms forever |
 | [CNG-018](#cng-018) | Medium | **Fixed** | `identifyMe` can arrive before the client's listener is attached |
 | [CNG-019](#cng-019) | Medium | Open | Any client can claim to be the host of any game |
@@ -108,7 +108,21 @@ Repro: play to the end of a game, or let the voting timer expire. Watch the host
 
 ### CNG-002
 **Saved games drop answers/lies/votes — every game resumes corrupt after a restart**
-Critical · Open · `src/GameState.ts:434-451`
+Critical · **Fixed 2026-07-15** · `src/GameState.ts:434-451`
+
+> Fixed: `toJSON` now serializes everything a round needs — `userAnswers`,
+> `assignedQuestions`, `lies`, `votes`, `currentLieTargetPlayer`, `timerValue`,
+> `lastActivity` — behind a `SAVE_VERSION`. `fromJSON` returns `null` for anything it
+> can't faithfully restore and the caller drops it: a save we half-understand is worse
+> than a lost one, because it yields a game that looks playable and isn't.
+>
+> The 37 legacy saves have no version and are dropped on load, which is correct —
+> none were resumable.
+>
+> Verified against the real workflow: SIGINT the server mid-lie-round, restart,
+> reconnect. Answers and lies survive, the player who'd already lied isn't asked
+> again, the one who hadn't still is, the target still waits, and the round plays on
+> into voting. `scratchpad/verify_cng002.js`.
 
 `toJSON()` persists only `sharedState`, `usedQuestionIndexes`, `currentPhase`, and
 `currentQuestionIndex`. It omits `userAnswers`, `lies`, `votes`, and
@@ -425,7 +439,13 @@ kill it") and no client emits it. Delete it, or gate it behind a dev-only env va
 
 ### CNG-016
 **Games are never expired — 37 stale games on disk**
-Medium · Open · `src/index.ts:20-48`
+Medium · **Fixed 2026-07-15** · `src/index.ts:20-48`
+
+> Fixed: `GameState` tracks `lastActivity` (touched on every mutation) and games idle
+> more than 12h are dropped on both load and save. 12h is long enough to survive a
+> restart mid-game — the whole point of saving — and short enough that the store
+> doesn't grow without bound. `games.json` is now gitignored; it still saves, it just
+> doesn't churn commits.
 
 Nothing ever deletes a game. `games.json` has accumulated 37, all reloaded into
 memory at boot, all in whatever broken state CNG-002 left them. `todo.txt` already

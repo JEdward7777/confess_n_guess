@@ -162,3 +162,31 @@ the 24th in minutes.
 
 **Still open from the original five:** CNG-002 (restart corrupts saved games) and
 CNG-003/CNG-004 (timer cascade, inverted lie round). Those are next.
+
+---
+
+## 2026-07-15 — T5: full state serialization (CNG-002, CNG-016)
+
+**Done.** `toJSON` now saves everything a round needs — `userAnswers`,
+`assignedQuestions`, `lies`, `votes`, `currentLieTargetPlayer`, `timerValue`,
+`lastActivity` — behind `SAVE_VERSION = 2`. `fromJSON` returns `null` for anything it
+can't faithfully restore, and the loader drops it: a save we only half understand is
+worse than a lost one, because it produces a game that looks playable and isn't. Added
+`lastActivity` (touched on every mutation) with a 12h idle sweep on load and save.
+
+**Verified against the actual workflow this exists for.** Built a game to mid-lie-round
+with one lie already in, SIGINT'd the server, restarted, reconnected everyone:
+
+- saved phase `submittingLies`, answers `[alice, bob, carol]`, lies `{alice: [bob]}` —
+  all of which the old `toJSON` silently discarded
+- host resumed the lie round; all players still present
+- bob (already lied) → waiting; carol (hadn't) → still asked; alice (target) → waiting
+- carol's lie completed the round → voting
+
+The 37 legacy saves have no version field and are all dropped on load, cleanly. That's
+correct — none of them were resumable.
+
+**Remaining from the original five:** CNG-003 (timer cascade) and CNG-004 (inverted
+lie round). Both live in the `timerExpired` handler, and both are really symptoms of
+CNG-023 (the transition logic is copy-pasted 3x and has drifted). Worth doing T3/T4
+together with an eye to T6 rather than patching each copy.

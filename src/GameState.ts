@@ -27,6 +27,13 @@ export interface Vote {
 }
 
 export class GameState {
+    /**
+     * Bump when a change makes older saves unreadable. fromJSON drops anything that
+     * doesn't match rather than loading it into a shape the code no longer expects.
+     */
+    static readonly SAVE_VERSION = 2;
+
+    private lastActivity: number;
     private sharedState: SharedState;
     private usedQuestionIndexes: number[];
     // Which question each player was actually handed. Without this the server has no
@@ -60,6 +67,16 @@ export class GameState {
         this.currentLieTargetPlayer = '';
         this.lies = {};
         this.votes = {};
+        this.lastActivity = Date.now();
+    }
+
+    /** Mark the game as alive. Anything idle long enough gets swept (CNG-016). */
+    touch(): void {
+        this.lastActivity = Date.now();
+    }
+
+    getLastActivity(): number {
+        return this.lastActivity;
     }
 
     // Timer management
@@ -95,6 +112,7 @@ export class GameState {
 
     // User management
     addUser(name: string, emoji: string): void {
+        this.touch();
         this.sharedState.users[name] = {
             name,
             emoji,
@@ -214,6 +232,7 @@ export class GameState {
 
     // Answer management
     addAnswer(username: string, question: string, answer: string): void {
+        this.touch();
         this.userAnswers[username] = {
             question,
             answer,
@@ -241,6 +260,7 @@ export class GameState {
 
     // Phase management
     setPhase(phase: GamePhase): void {
+        this.touch();
         this.currentPhase = phase;
     }
 
@@ -299,6 +319,7 @@ export class GameState {
 
     // Add a lie for the target player
     addLie(targetUsername: string, lieUsername: string, lie: string): void {
+        this.touch();
         if (!this.lies[targetUsername]) {
             this.lies[targetUsername] = [];
         }
@@ -321,6 +342,7 @@ export class GameState {
 
     // Add a vote
     addVote(targetUsername: string, voter: string, selectedUsername: string): void {
+        this.touch();
         if (!this.votes[targetUsername]) {
             this.votes[targetUsername] = [];
         }
@@ -467,23 +489,60 @@ export class GameState {
         this.currentLieTargetPlayer = '';
     }
 
-    // Serialize for saving
+    /**
+     * Serialize for saving.
+     *
+     * This must capture EVERYTHING a round needs. Restarting the server mid-game is a
+     * supported workflow - it's how code gets hot-patched during a live game without
+     * replaying the trace from the start - so anything omitted here reappears as a
+     * game that resumes into a state the code can't handle. This previously saved only
+     * sharedState/usedQuestionIndexes/currentPhase/currentQuestionIndex, so every game
+     * came back claiming to be mid-round with no answers, lies, votes or target
+     * (CNG-002).
+     *
+     * If you add a field to this class, add it here, and bump SAVE_VERSION if old
+     * saves can't be read.
+     */
     toJSON(): object {
         return {
+            version: GameState.SAVE_VERSION,
             sharedState: this.sharedState,
             usedQuestionIndexes: this.usedQuestionIndexes,
+            assignedQuestions: this.assignedQuestions,
+            userAnswers: this.userAnswers,
             currentPhase: this.currentPhase,
-            currentQuestionIndex: this.currentQuestionIndex
+            currentQuestionIndex: this.currentQuestionIndex,
+            timerValue: this.timerValue,
+            currentLieTargetPlayer: this.currentLieTargetPlayer,
+            lies: this.lies,
+            votes: this.votes,
+            lastActivity: this.lastActivity
         };
     }
 
-    // Load from saved state
-    static fromJSON(data: any, gameCode: string): GameState {
+    /**
+     * Load from saved state. Returns null for anything we can't faithfully restore -
+     * the caller drops it. Loading a save we only half understand is worse than losing
+     * it: it produces a game that looks playable and isn't.
+     */
+    static fromJSON(data: any, gameCode: string): GameState | null {
+        if (!data || typeof data !== 'object') return null;
+        if (data.version !== GameState.SAVE_VERSION) return null;
+        if (!data.sharedState || typeof data.sharedState.users !== 'object') return null;
+
         const gameState = new GameState(gameCode);
         gameState.sharedState = data.sharedState;
+        gameState.sharedState.code = gameCode;
         gameState.usedQuestionIndexes = data.usedQuestionIndexes || [];
+        gameState.assignedQuestions = data.assignedQuestions || {};
+        gameState.userAnswers = data.userAnswers || {};
         gameState.currentPhase = data.currentPhase || GamePhase.CollectingUsers;
         gameState.currentQuestionIndex = data.currentQuestionIndex || 0;
+        gameState.timerValue = data.timerValue || 0;
+        gameState.currentLieTargetPlayer = data.currentLieTargetPlayer || '';
+        gameState.lies = data.lies || {};
+        gameState.votes = data.votes || {};
+        gameState.lastActivity = data.lastActivity || Date.now();
         return gameState;
     }
 }
