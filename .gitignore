@@ -1,2 +1,10 @@
 node_modules/*
 venv/*
+
+# Runtime game state. Still written to disk (and must be — mid-game state has to
+# survive a restart so code can be hot-patched during a live game); just not tracked.
+games.json
+
+# Server output and scratch build logs
+server.log
+*.log
