@@ -17,13 +17,15 @@ const H2InformationScreenWithTimer = ({gameState}: H2InformationScreenWithTimerP
     const [count, setCounter] = useState<number>(gameState.timerValue ?? DEFAULT_COUNTDOWN);
     const hasSentTimeoutEvent = useRef(false);
 
-    // Use the timerValue from server if available
-    // Reset timer when text changes (e.g., transitioning from truths to lies)
+    // Restart the countdown whenever the server starts a new timed segment. phaseToken
+    // changes exactly then, which is more reliable than watching text/timerValue: two
+    // consecutive segments can carry the same text and the same 60, and the countdown
+    // would silently carry on from the old one.
     useEffect(() => {
         const newTimerValue = gameState.timerValue ?? DEFAULT_COUNTDOWN;
         setCounter(newTimerValue);
         hasSentTimeoutEvent.current = false; // Reset the timeout event flag
-    }, [gameState.timerValue, gameState.text]);
+    }, [gameState.phaseToken, gameState.timerValue, gameState.text]);
 
     //decrement the counter until it reaches 0
     useEffect(() => {
@@ -33,11 +35,16 @@ const H2InformationScreenWithTimer = ({gameState}: H2InformationScreenWithTimerP
             }, 1000);
             return () => clearTimeout(timer);
         } else if (count === 0 && !hasSentTimeoutEvent.current) {
-            // Timer reached zero - notify server
+            // Timer reached zero - notify server. Echo back the token of the segment we
+            // were timing so the server can tell this apart from a countdown for a
+            // segment that has already moved on (CNG-003).
             hasSentTimeoutEvent.current = true;
-            socket.emit('timerExpired', { code: gameState?.sharedState?.code ?? "" });
+            socket.emit('timerExpired', {
+                code: gameState?.sharedState?.code ?? "",
+                phaseToken: gameState?.phaseToken
+            });
         }
-    }, [count, gameState?.sharedState?.code]);
+    }, [count, gameState?.sharedState?.code, gameState?.phaseToken]);
 
     const text = gameState.text ?? "Please wait...";
 

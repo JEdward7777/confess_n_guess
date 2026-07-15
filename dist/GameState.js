@@ -62,6 +62,18 @@ class GameState {
         this.lies = {};
         this.votes = {};
         this.lastActivity = Date.now();
+        this.phaseToken = 0;
+    }
+    /**
+     * Token for the current timed segment. Anything that ends a segment bumps it, so a
+     * timer callback or client timerExpired carrying an older token can be recognised
+     * as stale and dropped rather than applied to whatever phase happens to be current.
+     */
+    getPhaseToken() {
+        return this.phaseToken;
+    }
+    newSegment() {
+        this.phaseToken++;
     }
     /** Mark the game as alive. Anything idle long enough gets swept (CNG-016). */
     touch() {
@@ -72,6 +84,7 @@ class GameState {
     }
     // Timer management
     setTimerValue(value) {
+        this.newSegment();
         this.timerValue = value;
         this.timerStartTime = Date.now();
     }
@@ -191,6 +204,7 @@ class GameState {
     // Phase management
     setPhase(phase) {
         this.touch();
+        this.newSegment();
         this.currentPhase = phase;
     }
     // Timer management
@@ -230,6 +244,8 @@ class GameState {
         return this.currentLieTargetPlayer;
     }
     setCurrentLieTargetPlayer(player) {
+        // A new target is a new round even if the phase name doesn't change.
+        this.newSegment();
         this.currentLieTargetPlayer = player;
     }
     // Get the truth answer for a player
@@ -411,7 +427,8 @@ class GameState {
             currentLieTargetPlayer: this.currentLieTargetPlayer,
             lies: this.lies,
             votes: this.votes,
-            lastActivity: this.lastActivity
+            lastActivity: this.lastActivity,
+            phaseToken: this.phaseToken
         };
     }
     /**
@@ -439,6 +456,7 @@ class GameState {
         gameState.lies = data.lies || {};
         gameState.votes = data.votes || {};
         gameState.lastActivity = data.lastActivity || Date.now();
+        gameState.phaseToken = data.phaseToken || 0;
         return gameState;
     }
 }

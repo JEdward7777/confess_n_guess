@@ -34,6 +34,10 @@ export class GameState {
     static readonly SAVE_VERSION = 2;
 
     private lastActivity: number;
+    // Identifies the current timed segment of the game. Bumped whenever the game moves
+    // on in a way that invalidates an in-flight timer. A timerExpired carrying a stale
+    // token is a timer for a segment that's already over, and is ignored (CNG-003).
+    private phaseToken: number;
     private sharedState: SharedState;
     private usedQuestionIndexes: number[];
     // Which question each player was actually handed. Without this the server has no
@@ -68,6 +72,20 @@ export class GameState {
         this.lies = {};
         this.votes = {};
         this.lastActivity = Date.now();
+        this.phaseToken = 0;
+    }
+
+    /**
+     * Token for the current timed segment. Anything that ends a segment bumps it, so a
+     * timer callback or client timerExpired carrying an older token can be recognised
+     * as stale and dropped rather than applied to whatever phase happens to be current.
+     */
+    getPhaseToken(): number {
+        return this.phaseToken;
+    }
+
+    private newSegment(): void {
+        this.phaseToken++;
     }
 
     /** Mark the game as alive. Anything idle long enough gets swept (CNG-016). */
@@ -81,6 +99,7 @@ export class GameState {
 
     // Timer management
     setTimerValue(value: number): void {
+        this.newSegment();
         this.timerValue = value;
         this.timerStartTime = Date.now();
     }
@@ -261,6 +280,7 @@ export class GameState {
     // Phase management
     setPhase(phase: GamePhase): void {
         this.touch();
+        this.newSegment();
         this.currentPhase = phase;
     }
 
@@ -309,6 +329,8 @@ export class GameState {
     }
 
     setCurrentLieTargetPlayer(player: string): void {
+        // A new target is a new round even if the phase name doesn't change.
+        this.newSegment();
         this.currentLieTargetPlayer = player;
     }
 
@@ -516,7 +538,8 @@ export class GameState {
             currentLieTargetPlayer: this.currentLieTargetPlayer,
             lies: this.lies,
             votes: this.votes,
-            lastActivity: this.lastActivity
+            lastActivity: this.lastActivity,
+            phaseToken: this.phaseToken
         };
     }
 
@@ -543,6 +566,7 @@ export class GameState {
         gameState.lies = data.lies || {};
         gameState.votes = data.votes || {};
         gameState.lastActivity = data.lastActivity || Date.now();
+        gameState.phaseToken = data.phaseToken || 0;
         return gameState;
     }
 }

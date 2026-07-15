@@ -73,13 +73,29 @@ export class SocketHandlers {
         });
     }
 
+    /**
+     * Stamp the current phase token onto a state going to the host. The host's browser
+     * owns the countdown and echoes this back with timerExpired, which is how a timer
+     * for a segment that's already over gets recognised and dropped (CNG-003).
+     *
+     * Done here rather than at each of the ~15 emit sites: one of them would get missed,
+     * and a missing token means the guard silently lets everything through. See CNG-023
+     * for why that is not a hypothetical worry in this file.
+     */
+    private withPhaseToken(gameCode: string, data: ClientGameState): ClientGameState {
+        const gameState = this.games[gameCode];
+        if (!gameState) return data;
+        return { ...data, phaseToken: gameState.getPhaseToken() };
+    }
+
     private sendToHost(gameCode: string, data: ClientGameState): void {
         const socketInfo = this.socketStuff[gameCode];
         console.log('sendToHost called:', { gameCode, hasSocketInfo: !!socketInfo, hostSocketIds: socketInfo?.hostSocketIds, screen: data.screen });
         if (socketInfo && socketInfo.hostSocketIds && socketInfo.hostSocketIds.length > 0) {
+            const stamped = this.withPhaseToken(gameCode, data);
             // Send to all host sockets
             socketInfo.hostSocketIds.forEach(socketId => {
-                this.io.to(socketId).emit('gameState', data);
+                this.io.to(socketId).emit('gameState', stamped);
             });
         } else {
             console.log('WARNING: sendToHost no host socket found for game', gameCode);
@@ -148,8 +164,10 @@ export class SocketHandlers {
         // Helper to send to host - either via stored socket or provided socket
         const sendState = (state: ClientGameState) => {
             if (hostSocket) {
-                // Send directly to the socket that called startGame
-                hostSocket.emit('gameState', state);
+                // Send directly to the socket that called startGame. This path bypasses
+                // sendToHost, so stamp the token here too - a reconnecting host needs a
+                // current one or its countdown's timerExpired is rejected as stale.
+                hostSocket.emit('gameState', this.withPhaseToken(code, state));
             } else {
                 // Fallback to stored host socket
                 this.sendToHost(code, state);
@@ -1153,25 +1171,47 @@ export class SocketHandlers {
             }
         });
 
-        socket.on('timerExpired', ({ code }: { code: string }) => {
+        socket.on('timerExpired', ({ code, phaseToken }: { code: string; phaseToken?: number }) => {
             code = normalizeCode(code);
             const gameState = this.games[code];
             if (!gameState) return;
-            
+
             const phase = gameState.getPhase();
-            const prevPhase = gameState.getPhase(); // This is the same, but we'll check in handler
-            
-            console.log('Timer expired for game ' + code + ' phase: ' + phase);
-            
-            // If we're no longer in answeringQuestions, ignore this timer event
+
+            console.log('Timer expired for game ' + code + ' phase: ' + phase + ' token: ' + phaseToken);
+
+            // The countdown runs in the host's browser, and hostSocketIds is a list, so
+            // two host tabs means two countdowns and two of these events. Each h2 emit
+            // carries the token of the segment it is timing; anything that ends that
+            // segment bumps the token. So the first event is handled and the rest are
+            // recognised as timers for a segment that is already over.
+            //
+            // Without this the phase guard below admits three phases at once, so a
+            // second event lands in the phase the first one just created and cascades:
+            // AnsweringQuestions -> SubmittingLies -> "no lies submitted", which either
+            // restarts the round or skips a player with nobody having typed a thing
+            // (CNG-003).
+            // Every host-bound state carries a token (see withPhaseToken), so a host on
+            // the timer screen always has one. A missing token therefore means a stale
+            // client bundle, and an event we cannot place in time is not one to act on:
+            // reject rather than letting it through, which would leave the guard
+            // bypassable by exactly the stale tab it exists to stop. The host refreshing
+            // recovers, and reconnects now resync properly (CNG-005).
+            const currentToken = gameState.getPhaseToken();
+            if (phaseToken !== currentToken) {
+                console.log('Ignoring stale timerExpired (token ' + phaseToken + ', current ' + currentToken + ')');
+                return;
+            }
+
+            // If we're no longer in a timed phase, ignore this timer event
             // (It might be from a previous timer that was still running)
-            if (phase !== GamePhase.AnsweringQuestions && 
-                phase !== GamePhase.SubmittingLies && 
+            if (phase !== GamePhase.AnsweringQuestions &&
+                phase !== GamePhase.SubmittingLies &&
                 phase !== GamePhase.VotingOnLies) {
                 console.log('Ignoring timerExpired for phase: ' + phase);
                 return;
             }
-            
+
             if (phase === GamePhase.AnsweringQuestions) {
                 // Timer expired during truth phase - check if we have answers, then start lie phase
                 if (gameState.allUsersHaveAnswered()) {
@@ -1228,6 +1268,12 @@ export class SocketHandlers {
                         console.log('No answers submitted - restarting round');
                         gameState.setPhase(GamePhase.AnsweringQuestions);
                         gameState.clearAnswers();
+                        // A restarted round has to be actually fresh. clearAnswers alone
+                        // leaves currentLieTargetPlayer pointing mid-list, so the lie
+                        // phase would resume AFTER the old target and never come back to
+                        // the players before them - and the abandoned round's lies and
+                        // votes would survive into the new one (CNG-025).
+                        gameState.resetLieData();
                         gameState.setTimerValue(30);
                         
                         // Send timer screen to host only
@@ -1384,6 +1430,9 @@ export class SocketHandlers {
                                 console.log('No lies submitted for first player - restarting round');
                                 gameState.setPhase(GamePhase.AnsweringQuestions);
                                 gameState.clearAnswers();
+                                // See CNG-025 above - a restart must reset the lie round
+                                // pointer and drop the abandoned round's lies/votes.
+                                gameState.resetLieData();
                                 gameState.setTimerValue(30);
                                 
                                 // Send timer screen to host only
@@ -1625,73 +1674,13 @@ export class SocketHandlers {
                             }
                         });
                         
-                        // Continue with results delay - then move to next player or end game
-                        setTimeout(() => {
-                            this.sendToHost(code, {
-                                screen: Screens.h5ShowThePointsForTheRound,
-                                text: 'Points for round!',
-                                leaderboard
-                            });
-                            
-                            this.sendToPlayers(code, {
-                                screen: Screens.c2WaitingScreenJustWhateverText,
-                                text: 'Points have been awarded!'
-                            });
-                            
-                            setTimeout(() => {
-                                // Use skipping method to handle players without truths
-                                const nextTarget = gameState.getNextLieTargetPlayerSkippingMissing();
-                                
-                                if (nextTarget) {
-                                    gameState.setCurrentLieTargetPlayer(nextTarget);
-                                    gameState.setPhase(GamePhase.SubmittingLies);
-                                    gameState.setTimerValue(60);
-                                    
-                                    const nextTruth = gameState.getTruthForPlayer(nextTarget);
-                                    const nextUserNames = gameState.getUserNames();
-                                    
-                                    this.sendToHost(code, {
-                                        screen: Screens.h2InformationScreenWithTimer,
-                                        text: 'Now submitting lies for ' + nextTarget + '!',
-                                        timerValue: 60
-                                    });
-                                    
-                                    nextUserNames.forEach(username => {
-                                        if (username !== nextTarget) {
-                                            const socketInfo = this.socketStuff[code];
-                                            if (socketInfo && socketInfo.playerSockets && socketInfo.playerSockets[username]) {
-                                                const socketIds = socketInfo.playerSockets[username];
-                                                socketIds.forEach(socketId => {
-                                                    this.io.to(socketId).emit('gameState', {
-                                                        screen: Screens.c5SubmitLie,
-                                                        text: 'Write a LIE for ' + nextTarget + '!',
-                                                        question: nextTruth?.question || '',
-                                                        targetPlayer: nextTarget,
-                                                        instructionText: `Write a fooling answer for this question about ${nextTarget}`
-                                                    });
-                                                });
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    gameState.setPhase(GamePhase.GameOver);
-                                    const finalLeaderboard = gameState.getLeaderboard();
-                                    const winner = finalLeaderboard[0];
-                                    
-                                    this.sendToHost(code, {
-                                        screen: Screens.h6ShowTheWinner,
-                                        text: 'Winner: ' + winner.name + '!',
-                                        leaderboard: finalLeaderboard
-                                    });
-                                    
-                                    this.sendToPlayers(code, {
-                                        screen: Screens.h6ShowTheWinner,
-                                        text: 'Winner: ' + winner.name + '!',
-                                        leaderboard: finalLeaderboard
-                                    });
-                                }
-                            }, 5000);
-                        }, 5000);
+                        // Stop here and wait for the host, exactly like the all-voted path
+                        // in voteOnLie. This used to schedule a 5s timeout, and another
+                        // 5s inside it, that showed points and advanced to the next
+                        // target without ever re-checking the phase. The host can click
+                        // Continue during those 10 seconds, so the game advanced twice
+                        // and a player's whole round got skipped. The timeouts were also
+                        // never cleared, so they outlived the game (CNG-011).
                     }
                 }
             }

@@ -217,3 +217,55 @@ copy to keep true rather than two to drift apart.
 phases, so two `timerExpired` events cascade). That one is worth doing properly —
 moving the countdown server-side via the unused `GameState.startTimer` — rather than
 patching the guard. It is also entangled with CNG-011 and CNG-023.
+
+---
+
+## 2026-07-15 — T3 (correctness half): timer cascade (CNG-003, -011, -025)
+
+**Done.** The last of the five original criticals no longer wrecks rounds.
+
+- **Phase token (CNG-003).** `GameState` carries a counter bumped by anything ending a
+  timed segment. Every host-bound state is stamped with it in
+  `sendToHost`/`sendHostToCorrectScreen` — deliberately in one place rather than at the
+  ~15 emit sites, because missing one silently disables the guard, and CNG-023 says
+  that's what happens in this file. The host's countdown echoes it back with
+  `timerExpired`; the second of two events is recognised as timing a segment that's
+  already over and dropped.
+- A **missing** token is rejected too. My first cut allowed it for backwards
+  compatibility, which would have left the guard bypassable by exactly the stale tab it
+  exists to stop. Every host emit now carries one, so absence means a stale bundle —
+  and an event we can't place in time isn't one to act on. Recovery is a host refresh,
+  which is cheap now CNG-005 works.
+- **Deleted the blind setTimeout chain (CNG-011).** The voting-timeout path now stops at
+  ShowingLieResults and waits for the host, like the all-voted path in `voteOnLie`. That
+  inconsistency was the bug — one waited, the other raced ahead after 10s and could
+  double-advance past the host's Continue. H3 already auto-continues, so nothing stalls.
+  Also removes a latent crash on `winner.name` off an empty leaderboard.
+- The client's countdown now resets on the token rather than on `text` changing, which
+  is what the "Reset host timer when transitioning from truths to lies" commits were
+  chasing. Two segments can carry identical text and the same 60s.
+
+**Verified:** two host tabs both firing — exactly one applied, all players in one
+coherent state, game still playable; stale and untokened events both rejected. All six
+suites green together (`verify_cng001/003/003b/004/005/006`).
+
+**Found CNG-025 on the way.** Both round-restart paths called `clearAnswers()` but never
+`resetLieData()`, so a "fresh" round kept `currentLieTargetPlayer` pointing mid-list.
+Since the target scan deliberately doesn't wrap (commit `553d19d`), the restarted round
+resumed *after* the old target and everyone before them never got a round — and the
+abandoned round's lies and votes leaked into the new one. Fixed.
+
+**Deliberately not done: moving the countdown server-side.** The token closed the
+correctness bug; what's left is robustness (the game stalls if the host closes their
+tab, as the only clock is in their browser). Doing it now means touching ~8 duplicated
+transition sites, and missing one gives a round that never advances — worse than what
+it fixes. It also needs timers restarted on load, since a timer isn't serialisable.
+Deferred to after T6, when there's one place to put it. That reverses what I said
+earlier ("worth doing properly rather than patching the guard") — the token turned out
+to be a real fix rather than a patch, and T6-first is the cheaper order.
+
+**Process note:** two false results this session, both from my own shell, both the same
+shape — a stale server on the port serving an old build, and a `cd` that persisted so
+`npx tsc`/`npm run build_server` ran in the scratchpad and silently didn't rebuild.
+Always rebuild from the repo root and confirm the guard you just wrote is actually in
+`dist/` before believing a result.

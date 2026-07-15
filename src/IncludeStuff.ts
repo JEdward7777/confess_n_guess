@@ -52,6 +52,9 @@ export interface ClientGameState {
     text?: string,
     instructionText?: string,
     timerValue?: number,
+    // Identifies the timed segment this state belongs to. The host echoes it back with
+    // timerExpired so the server can drop a countdown for a segment that's already over.
+    phaseToken?: number,
     answers?: UserAnswer[],
     leaderboard?: LeaderboardEntry[],
     targetPlayer?: string,

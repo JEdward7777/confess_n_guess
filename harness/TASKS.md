@@ -12,49 +12,32 @@ Written alongside the 2026-07-15 sweep; five tasks landed the same day (see Done
 - **T4** — lie round un-inverted in the skip path (CNG-004, part of -014). `808f39d`
 - **T5** — full state serialization + idle sweep (CNG-002, -016). `c494f4c`
 - **T13** — assigned questions stored server-side (CNG-006). `318dae1`
+- **T3 (correctness half)** — timer cascade + blind timeouts (CNG-003, -011, -025).
 
 Every one was verified against a running server, not just compiled. Scripts live in
 the session scratchpad and should be folded into T8.
 
 ## Now
 
-### T3 — Give the server the timer back
-Closes **CNG-003**, **CNG-011**; retires half of **CNG-022**.
+### T6 — Collapse the duplicated transitions
+Closes **CNG-023**, **CNG-013**, rest of **CNG-014**; retires the rest of **CNG-022**.
 
-The last of the five original criticals, and the only one left that can still wreck a
-live round.
+Now the highest-value item: it's the disease behind several of the fixes already made.
+Truths→lies is written out three times, lies→voting twice, voting→results twice, and
+they have already drifted — one shuffles the reveal, another doesn't, so whether the
+reveal order is randomised depends on whether the timer expired. CNG-004 (roles
+inverted) and CNG-025 (restart not resetting) were both single copies that drifted from
+their siblings. Every fix here risks missing a path until this is one method per
+transition.
 
-`GameState.startTimer` already exists and is never called — the authoritative
-countdown runs in the *host's browser*. Two host tabs means two countdowns, and
-`timerExpired`'s guard admits three phases at once, so two events in a row punch
-through into the next phase: the round either restarts or a player is skipped, with
-nobody having typed anything. Note the previous agent's socket-list change is what
-made two live host sockets possible, so this is reachable today.
+Extract one method per transition. Fold the remaining hand-inlined socket loops into
+`sendToUserSockets`. Make every emit carry its own `targetPlayer` instead of relying on
+the client's merge leaving a stale one (`:809`, `:1302` still don't).
 
-Move the countdown server-side and reduce the client's `timerExpired` to advisory (or
-drop it). While here, delete the two nested blind `setTimeout`s at `:1588-1653` — they
-advance the game without re-checking the phase, so they race the host's Continue
-button and can skip a whole round (CNG-011).
-
-Interim fix if a full move is too big for one pass: give `timerExpired` a phase/round
-token and reject any that doesn't match. That alone stops the cascade.
-
-Verify: open the host on two tabs and let a timer run out — the round must advance
-once. Today it restarts the round or skips a player.
+Doing this first also makes T3's remainder nearly free — there'd be one place to start
+a server-side timer instead of eight.
 
 ## Next
-
-### T6 — Collapse the duplicated transitions
-Closes **CNG-023**, **CNG-013**, **CNG-014**; retires the rest of **CNG-022**.
-
-Truths→lies exists three times, lies→voting twice, voting→results twice, and they
-have already drifted apart (one shuffles the reveal, another doesn't). Extract one
-method per transition. Fold the ~12 hand-inlined socket loops into the
-already-written-but-unused `sendToUserSockets`. Ensure every emit that a screen
-depends on carries its own `targetPlayer` rather than relying on the client's merge
-leaving a stale one lying around.
-
-Do T3 and T4 first — this is a refactor and wants the semantics settled.
 
 ### T7 — Server-side identity
 Closes **CNG-009**, **CNG-008**, **CNG-019**, **CNG-012**, **CNG-020**.
@@ -78,6 +61,15 @@ human. Everything above is currently verified by hand across four browser tabs, 
 is why regressions keep landing.
 
 ## Backlog
+
+- **T3 (remainder)** — move the countdown off the host's browser and onto the server,
+  via the unused `GameState.startTimer`. **Deliberately deferred.** The phase token
+  closed the correctness bug (CNG-003), so what's left is robustness: today the game
+  stalls if the host closes their tab, since the only clock is in their browser.
+  Doing it now means touching ~8 duplicated transition sites and missing one means a
+  round that never advances — a worse failure than the one being fixed. It also needs
+  timers restarted on load, since a timer can't be serialised. Do it after T6, when
+  there is one place to put it.
 
 - **T9** — Remove or gate `killServer` (**CNG-015**). Any client can kill the process.
 - **T11** — Fix H5 auto-continue re-arming (**CNG-017**).

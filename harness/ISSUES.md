@@ -11,7 +11,7 @@ checking library source or on-disk data) — none are speculative unless marked
 |---|---|---|---|
 | [CNG-001](#cng-001) | Critical | **Fixed** | `sendToPlayers` never excludes the host — host device gets player screens |
 | [CNG-002](#cng-002) | Critical | **Fixed** | Saved games drop answers/lies/votes — every game resumes corrupt after a restart |
-| [CNG-003](#cng-003) | Critical | Open | Duplicate `timerExpired` cascades through phases and wrecks the round |
+| [CNG-003](#cng-003) | Critical | **Fixed** | Duplicate `timerExpired` cascades through phases and wrecks the round |
 | [CNG-004](#cng-004) | Critical | **Fixed** | Lie-round roles inverted in the skip path — target lies about themselves |
 | [CNG-005](#cng-005) | Critical | **Fixed** | Reconnect never resyncs — refreshing leaves you on a stale screen |
 | [CNG-006](#cng-006) | High | **Fixed** | Resync re-rolls the player's question; assignment never stored server-side |
@@ -19,7 +19,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-008](#cng-008) | High | Open | Duplicate name silently merges two devices into one player |
 | [CNG-009](#cng-009) | High | Open | Server trusts the client-supplied `name` on every event |
 | [CNG-010](#cng-010) | High | Open | `startGame` doesn't clear answers or the question pool |
-| [CNG-011](#cng-011) | High | Open | Blind `setTimeout` chain advances the game behind the host's back |
+| [CNG-011](#cng-011) | High | **Fixed** | Blind `setTimeout` chain advances the game behind the host's back |
 | [CNG-012](#cng-012) | High | Open | `addLie`/`addVote` don't dedupe — duplicate entries and double points |
 | [CNG-013](#cng-013) | Medium | Open | `nextRound` broadcasts every question to every player |
 | [CNG-014](#cng-014) | Medium | Partly fixed | Skip path omits `targetPlayer`, client submits against a stale target |
@@ -32,6 +32,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-021](#cng-021) | High | Open | No automated test can reach any of this |
 | [CNG-022](#cng-022) | Low | Open | Dead code: server-side timer, `sendToUserSockets` |
 | [CNG-023](#cng-023) | Low | Open | ~700 lines of duplicated phase-transition logic |
+| [CNG-025](#cng-025) | High | **Fixed** | A restarted round isn't fresh — keeps the old target pointer, lies and votes |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -155,7 +156,29 @@ rather than loaded into a shape the code no longer expects.
 
 ### CNG-003
 **Duplicate `timerExpired` cascades through phases and wrecks the round**
-Critical · Open · `src/socketHandlers.ts:1114-1131`
+Critical · **Fixed 2026-07-15** · `src/socketHandlers.ts:1114-1131`
+
+> Fixed with a phase token. `GameState` carries a counter bumped by anything that ends
+> a timed segment (`setPhase`, `setTimerValue`, `setCurrentLieTargetPlayer`). Every
+> host-bound state is stamped with it in `sendToHost`/`sendHostToCorrectScreen` — one
+> place, not the ~15 emit sites, because missing one would silently disable the guard.
+> The host's countdown echoes it back with `timerExpired`, so the second of two events
+> is recognised as timing a segment that is already over, and dropped.
+>
+> A *missing* token is rejected too. Being lenient there would leave the guard
+> bypassable by exactly the stale tab it exists to stop; since every host emit now
+> carries one, absence means a stale bundle, and an event we can't place in time isn't
+> one to act on. Recovery is a host refresh, which is cheap now CNG-005 is fixed.
+>
+> The client's countdown reset now keys off the token rather than `text`/`timerValue`
+> changing — two consecutive segments can carry identical text and the same 60s, and
+> the old countdown would silently carry on.
+>
+> Verified with two host tabs both firing: exactly one is applied, all players stay in
+> one coherent state, and the game remains playable. Stale and untokened events are
+> both rejected. `scratchpad/verify_cng003.js`, `verify_cng003b.js`.
+>
+> **Not done:** moving the countdown off the host's browser. See the note under T3.
 
 The guard admits three phases at once:
 
@@ -374,7 +397,16 @@ answers. And the question pool keeps shrinking across games until it's empty.
 
 ### CNG-011
 **Blind `setTimeout` chain advances the game behind the host's back**
-High · Open · `src/socketHandlers.ts:1588-1653`
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:1588-1653`
+
+> Fixed by deleting the chain. The voting-timeout path now stops at
+> `ShowingLieResults` and waits for the host, exactly like the all-voted path in
+> `voteOnLie` ("DO NOT auto-continue - wait for host to click Continue"). That
+> inconsistency *was* the bug: one path waited, the other raced ahead after 10s. The
+> host's H3 screen already auto-continues after the reveal, so nothing stalls.
+>
+> Also removes a latent crash: the deleted code read `winner.name` off an empty
+> leaderboard.
 
 The voting-timeout path schedules a 5s timeout, and a further 5s timeout inside it,
 which show points and then advance to the next lie target. Neither re-checks the
@@ -604,3 +636,33 @@ Latent before CNG-005 was fixed, because resync only ran when a submission arriv
 the wrong phase. Wiring resync into reconnect made it reachable by simply refreshing
 during a vote — which is exactly the reported "refresh and things go weird". Found by
 the CNG-005 verification, not by reading.
+
+---
+
+### CNG-025
+**A restarted round isn't fresh — keeps the old target pointer, lies and votes**
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:1262-1265, 1418-1421`
+
+Both round-restart paths in `timerExpired` ("No answers submitted - restarting round"
+and "No lies submitted for first player - restarting round") called `clearAnswers()`
+but never `resetLieData()`:
+
+```ts
+gameState.setPhase(GamePhase.AnsweringQuestions);
+gameState.clearAnswers();
+gameState.setTimerValue(30);
+```
+
+`clearAnswers()` drops answers and question assignments. It does not touch
+`currentLieTargetPlayer`, `lies` or `votes` — that's `resetLieData()`, which only
+`startGame` calls. So after a restart:
+
+- `currentLieTargetPlayer` still points mid-list. `getNextLieTargetPlayerSkippingMissing()`
+  scans *after* the current target and deliberately doesn't wrap (see CNG "Don't wrap
+  around when skipping players without truths", commit `553d19d`), so the fresh round
+  resumes at the player after the old target and **everyone before them never gets a
+  round at all**.
+- The abandoned round's lies and votes survive into the new one.
+
+Found by the CNG-003 verification: after a restart the round targeted `bob` instead of
+starting over at `alice`. Fixed by calling `resetLieData()` in both paths.
