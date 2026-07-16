@@ -14,7 +14,6 @@ import C4PickBestAnswer from './C4PickBestAnswer';
 import C5SubmitLie from './C5SubmitLie';
 import H2InformationScreenWithTimer from './H2InformationScreenWithTimer';
 import H3ShowLiesAndTruths from './H3ShowLiesAndTruths';
-import H4IterateAnswers from './H4IterateAnswers';
 import H5ShowPoints from './H5ShowPoints';
 import H6ShowWinner from './H6ShowWinner';
 
@@ -195,7 +194,6 @@ function App() {
       {screen === Screens.h1CollectingUsers && <H1CollectingUsersPage gameState={gameState} />}
       {screen === Screens.h2InformationScreenWithTimer && <H2InformationScreenWithTimer gameState={gameState} />}
       {screen === Screens.h3ShowTheLiesAndTruths && <H3ShowLiesAndTruths gameState={gameState} />}
-      {screen === Screens.h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo && <H4IterateAnswers gameState={gameState} />}
       {screen === Screens.h5ShowThePointsForTheRound && <H5ShowPoints gameState={gameState} />}
       {screen === Screens.h6ShowTheWinner && <H6ShowWinner gameState={gameState} />}
       {screen === Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture && <C1TypeInYourNameAndPickAnEmojiForYourPicturePage gameState={gameState}/>}

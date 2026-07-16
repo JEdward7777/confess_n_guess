@@ -56,7 +56,6 @@ export enum Screens {
     h1CollectingUsers = 1,
     h2InformationScreenWithTimer = 2,
     h3ShowTheLiesAndTruths = 3,
-    h4IterateThroughTheDifferentAnswersAndPopUpYesOrNo = 4,
     h5ShowThePointsForTheRound = 5,
     h6ShowTheWinner = 6,
     c1TypeInYourNameAndPickAnEmojiForYourPicture = 7,

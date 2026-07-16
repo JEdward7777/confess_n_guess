@@ -1180,56 +1180,6 @@ export class SocketHandlers {
             }
         });
 
-        socket.on('selectBestAnswer', ({ code, selectedUsername }: { code: string; selectedUsername: string }) => {
-            code = normalizeCode(code);
-            const gameState = this.games[code];
-            
-            if (gameState) {
-                // This is a legacy handler - we now use voteOnLie instead
-                // But keep for backward compatibility - check phase
-                if (gameState.getPhase() !== GamePhase.VotingOnLies && gameState.getPhase() !== GamePhase.ShowingPoints) {
-                    console.log('ERROR: Received selectBestAnswer at wrong phase. Resyncing host.');
-                    this.sendHostToCorrectScreen(code, gameState);
-                    return;
-                }
-                
-                console.log('Best answer selected: ' + selectedUsername);
-                
-                // Award points to the selected player
-                gameState.addPoints(selectedUsername, 10);
-                
-                // Move to showing points phase
-                gameState.setPhase(GamePhase.ShowingPoints);
-                
-                // Show points to host (H5)
-                const leaderboard = gameState.getLeaderboard();
-                this.sendToHost(code, {
-                    screen: Screens.h5ShowThePointsForTheRound,
-                    text: `${selectedUsername} got the most votes!`,
-                    leaderboard
-                });
-                
-                // Show waiting to players
-                this.sendToPlayers(code, {
-                    screen: Screens.c2WaitingScreenJustWhateverText,
-                    text: `The best answer was "${selectedUsername}"! Check the leaderboard on the host screen.`
-                });
-            }
-        });
-
-        socket.on('nextRound', ({ code }: { code: string }) => {
-            code = normalizeCode(code);
-            const gameState = this.games[code];
-            
-            if (gameState) {
-                // This used to loop over players calling sendToPlayers, which is a room
-                // broadcast and ignores the username entirely - so every player's question
-                // went to everyone and they all ended up looking at whichever was drawn
-                // last (CNG-013). beginAnsweringRound targets each player properly.
-                this.restartRound(code, gameState, 'Truthfully answer the questions on your device.');
-            }
-        });
-
         // Host clicks continue on results screen
         socket.on('continueFromResults', ({ code }: { code: string }) => {
             code = normalizeCode(code);
@@ -1254,11 +1204,15 @@ export class SocketHandlers {
         });
 
 
+        // Nothing in the current client emits this; it stays because the
+        // host-exclusion test drives it, and that test depends on its host/player
+        // screen split (see CNG-034 for why its two orphaned siblings were deleted).
         socket.on('endGame', ({ code }: { code: string }) => {
             code = normalizeCode(code);
             const gameState = this.games[code];
             
-            if (gameState) {
+            if (gameState && gameState.getPhase() !== GamePhase.GameOver) {
+                gameState.stopTimer();
                 gameState.setPhase(GamePhase.GameOver);
                 
                 const leaderboard = gameState.getLeaderboard();
