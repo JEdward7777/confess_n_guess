@@ -105,11 +105,11 @@ time here; `tests/server.js` avoids them by tracking the pid.
 - Identity is currently client-asserted: handlers trust the `name` in the event
   payload. This is the root cause of most reconnection bugs (CNG-009). Prefer fixes
   that move identity server-side.
-- The phase countdown runs in the *host's browser*, not the server. Duplicate and stale
-  countdowns are handled by the phase token (CNG-003), but the clock still lives in a
-  browser, so a host who closes their tab stalls the game. `GameState.startTimer` is
-  written, unused, and kept **on purpose** — it's the mechanism for that fix (T3
-  remainder). Don't "clean it up".
+- The server owns the phase countdown (`startPhaseTimer`). The host's browser also counts
+  down so players see a number, and still sends `timerExpired` as a token-guarded
+  fallback, but the game does not depend on it. Round lengths are overridable via
+  `CNG_ROUND_SECONDS` / `CNG_RESTART_SECONDS` — that exists so tests can watch a real
+  timer fire in seconds; nothing in the game should read those directly.
 - Phase transitions live in one method each (`beginLieRound`, `beginVoting`,
   `showLieResults`, …). Keep it that way: when these were hand-copied they drifted and
   produced CNG-004, -014 and -025 (CNG-023).

@@ -405,3 +405,39 @@ moment the thing is unobservable.
 
 7/7 green. Nothing queued; the T3 remainder (server-owned countdown) is the only
 substantial item left, and is robustness rather than correctness.
+
+---
+
+## 2026-07-15 — T3 remainder: the server owns the clock (CNG-027, CNG-022)
+
+**Done.** `startPhaseTimer` starts the authoritative countdown inside the transition
+helpers — one place each, which only T6 made possible. `GameState.startTimer`, written
+long ago and never called, is finally in use and now captures the phase token at start,
+firing only if that segment is still current. `resumeTimers()` restarts the clock for any
+game restored mid-round, giving the round its **full** time back: the reason to restart is
+to hot-patch code, and taking the players' thinking time as a side effect of a rebuild
+would be its own bug.
+
+Kept the host's `timerExpired` as a fallback rather than deleting it — if the server's
+timer somehow never started, the host's browser is a second chance instead of the only
+chance. Both routes call the same `handleTimerExpiry`, so they can't drift apart, which is
+the whole lesson of CNG-023.
+
+**The user assumed the full walkthrough test would guard this. It does not, and that was
+worth checking rather than agreeing to.** `fullgame` submits every action promptly and
+finishes in ~6 seconds against a 60-second clock, so **no timer has ever fired inside it**.
+The `timer` test emits `timerExpired` by hand rather than waiting. So between them they
+cover what a timer *triggers* and nothing about a timer *firing*.
+
+Measured, not assumed: with the server clock reverted, **7 of 8 tests stayed green** —
+including `fullgame` and `restart-survival`. Only the new `timer-fires` caught it, showing
+the game frozen exactly where the host abandoned it (`alice:c2Waiting bob:c5Lie
+carol:c5Lie`). A full walkthrough is not automatically a guard against everything it walks
+past; it only tests what it waits for.
+
+`timer-fires` covers the three things nothing else could: a round timing out with **no host
+connected at all**, the round restarting on its own, and a restored game's clock actually
+running after a restart. Round lengths are overridable via `CNG_ROUND_SECONDS` so it takes
+seconds rather than a minute.
+
+8/8 green. Nothing dead left in `GameState` or `socketHandlers`. Nothing queued.

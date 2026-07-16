@@ -15,30 +15,21 @@ Written alongside the 2026-07-15 sweep; five tasks landed the same day (see Done
 - **T3 (correctness half)** — timer cascade + blind timeouts (CNG-003, -011, -025). `1e8912f`
 - **T6** — one method per transition; -520 lines (CNG-023, -010, -013, -014, part of -022). `25d439f`
 - **T8** — integration suite behind `npm test` (CNG-021). `de6bd50`
-- **T7 (revised)** — identity accepted as claimed-not-proved; fixed the honest-player bugs it was hiding (CNG-012, -020, -026).
+- **T7 (revised)** — identity accepted as claimed-not-proved; fixed the honest-player bugs it was hiding (CNG-012, -020, -026). `78357fa`
+- **T3 (remainder)** — server owns the countdown; host can leave (CNG-027, -022).
 
 Every one was verified against a running server, not just compiled. Scripts live in
 the session scratchpad and should be folded into T8.
 
 ## Now
 
-Nothing queued. The five original criticals are fixed, and the identity question is
-settled (see the decision note in `ISSUES.md`).
+Nothing queued.
 
-The one item with real substance left is the **T3 remainder** — moving the countdown off
-the host's browser — because a host who closes their tab currently stalls the game. It is
-robustness, not correctness: the phase token already stops stale and duplicate timers.
+All five original criticals are fixed, the identity question is settled (see the decision
+note in `ISSUES.md`), and `npm test` covers every one of them. What's left in Backlog is
+small and genuinely optional.
 
 ## Backlog
-
-- **T3 (remainder)** — move the countdown off the host's browser and onto the server,
-  via the unused `GameState.startTimer`. **Deliberately deferred.** The phase token
-  closed the correctness bug (CNG-003), so what's left is robustness: today the game
-  stalls if the host closes their tab, since the only clock is in their browser.
-  Doing it now means touching ~8 duplicated transition sites and missing one means a
-  round that never advances — a worse failure than the one being fixed. It also needs
-  timers restarted on load, since a timer can't be serialised. Do it after T6, when
-  there is one place to put it.
 
 - **T9** — Remove or gate `killServer` (**CNG-015**). Any client can kill the process.
 - **T11** — Fix H5 auto-continue re-arming (**CNG-017**).

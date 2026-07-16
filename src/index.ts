@@ -78,6 +78,11 @@ if (fs.existsSync('games.json')) {
 const io = new Server(server);
 
 const socketHandlers = new SocketHandlers(io, games);
+
+// Restart the clock on anything that was mid-round when we went down. Timers aren't
+// serialisable, so without this a restored game resumes and then never advances.
+socketHandlers.resumeTimers();
+
 io.on('connection', (socket) => {
     socketHandlers.handleConnection(socket);
 });

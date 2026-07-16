@@ -198,16 +198,25 @@ class GameState {
         this.newSegment();
         this.currentPhase = phase;
     }
-    // Timer management
+    /**
+     * Start the countdown for a new timed segment. This is the authoritative clock: the
+     * host's browser also counts down, but only so the players can see a number.
+     *
+     * onComplete only fires if the segment being timed is still the current one. Combined
+     * with stopTimer() on leaving a timed phase, that means a timer can never be applied
+     * to a phase it wasn't timing - the failure that CNG-003 was.
+     */
     startTimer(seconds, onComplete) {
-        this.timerValue = seconds;
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-        }
+        this.stopTimer();
+        // Bumps the phase token and records the start time.
+        this.setTimerValue(seconds);
+        const segment = this.phaseToken;
         this.timerInterval = setInterval(() => {
             this.timerValue--;
-            if (this.timerValue <= 0) {
-                this.stopTimer();
+            if (this.timerValue > 0)
+                return;
+            this.stopTimer();
+            if (this.phaseToken === segment) {
                 onComplete();
             }
         }, 1000);

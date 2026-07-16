@@ -30,7 +30,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-019](#cng-019) | Medium | **Won't fix** | Any client can claim to be the host of any game |
 | [CNG-020](#cng-020) | **High** | **Fixed** | Self-vote only prevented client-side |
 | [CNG-021](#cng-021) | High | **Fixed** | No automated test can reach any of this |
-| [CNG-022](#cng-022) | Low | Partly fixed | Dead code: server-side timer, `sendToUserSockets` |
+| [CNG-022](#cng-022) | Low | **Fixed** | Dead code: server-side timer, `sendToUserSockets` |
 | [CNG-023](#cng-023) | **High** | **Fixed** | ~700 lines of duplicated phase-transition logic |
 | [CNG-025](#cng-025) | High | **Fixed** | A restarted round isn't fresh — keeps the old target pointer, lies and votes |
 | [CNG-026](#cng-026) | High | **Fixed** | Post-submit confirmations only reach the submitting socket, so sibling tabs stay live |
@@ -216,7 +216,9 @@ Critical · **Fixed 2026-07-15** · `src/socketHandlers.ts:1114-1131`
 > one coherent state, and the game remains playable. Stale and untokened events are
 > both rejected. `scratchpad/verify_cng003.js`, `verify_cng003b.js`.
 >
-> **Not done:** moving the countdown off the host's browser. See the note under T3.
+> **Follow-up done 2026-07-15:** the countdown now runs on the server
+> (`startPhaseTimer`), so the game no longer depends on the host's browser at all. The
+> host's `timerExpired` remains as a token-guarded fallback. See CNG-027.
 
 The guard admits three phases at once:
 
@@ -671,9 +673,12 @@ Low · **Partly fixed 2026-07-15** · `src/GameState.ts:211-232`, `src/socketHan
 > hand-inlined copies of its loop are gone (T6). Also removed `sendToRoom`,
 > `sendToSocket`, `getClientState`, `getAllAnswers`, `getAllAnswersWithUsernames`.
 >
-> `startTimer`/`stopTimer` remain unused **on purpose** — they're the mechanism for T3's
-> remainder (moving the countdown off the host's browser). Delete them only if that gets
-> abandoned.
+> `startTimer`/`stopTimer` are now in use: the server owns the countdown (T3 remainder,
+> 2026-07-15). `startTimer` captures the phase token when it starts and only fires
+> `onComplete` if that segment is still current, so a timer can never be applied to a
+> phase it wasn't timing.
+>
+> Nothing dead is left in either file.
 
 `GameState.startTimer`/`stopTimer`/`timerInterval` are fully implemented and never
 called from anywhere — the authoritative countdown lives in the host's browser
@@ -814,3 +819,37 @@ Directly caused by the multi-device support that the CNG-008 decision above exis
 protect: the more devices a player is allowed, the more likely this is. Nothing to do
 with identity — an honest player gets the wrong result. Pairs with CNG-012, which is what
 makes the second submission count rather than being ignored.
+
+---
+
+### CNG-027
+**The only clock lived in the host's browser, so a host closing their tab froze the game**
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts`, `src/GameState.ts:211-232`
+
+The phase token (CNG-003) stopped duplicate and stale countdowns from corrupting a round,
+but the countdown itself still ran in `H2InformationScreenWithTimer` and the server only
+ever reacted to `timerExpired`. So the game's only clock was in one player's browser: close
+that tab, and every subsequent round would wait forever.
+
+Fixed: `startPhaseTimer` starts the authoritative countdown inside the transition helpers
+(`beginAnsweringRound`, `beginLieRound`, `beginVoting`) — possible in one place each only
+because T6 collapsed them first. `GameState.startTimer`, written long ago and never called
+(CNG-022), now captures the phase token at start and fires only if that segment is still
+current. `stopTimer()` on entering an untimed phase.
+
+The host's `timerExpired` is kept as a fallback rather than deleted: if the server's timer
+somehow never started, the host's browser is a second chance instead of the only chance.
+Both routes call the same `handleTimerExpiry`, so they cannot drift (CNG-023's lesson).
+
+`resumeTimers()` restarts the clock for any game restored mid-round — timers can't be
+serialised, so without it CNG-002's restart-survival would resume a game that then never
+advanced. The round gets its **full** time back rather than the remainder: the reason to
+restart mid-game is to hot-patch code, and taking the players' thinking time as a side
+effect of the developer's rebuild would be its own bug.
+
+**Why this needed a new test.** `ROUND_SECONDS` is now overridable via `CNG_ROUND_SECONDS`
+so a test can watch a real timer fire in seconds. That mattered: with the server clock
+reverted, `fullgame` and all six other tests stayed **green** — fullgame submits everything
+promptly and finishes in ~6s against a 60s clock, so no timer ever fires in it, and the
+`timer` test emits `timerExpired` by hand rather than waiting. Only `timer-fires` caught it.
+A full walkthrough is not automatically a guard against everything it walks past.

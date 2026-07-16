@@ -15,6 +15,7 @@ const TESTS = [
     'reconnect.test.js',
     'timer.test.js',
     'multi-device.test.js',
+    'timer-fires.test.js',
     'fullgame.test.js',
     'restart-survival.test.js'
 ];
@@ -41,7 +42,7 @@ async function main() {
 
         let server;
         try {
-            server = await TestServer.start();
+            server = await TestServer.start(test.env || {});
             const ok = await test.run({ url: server.url, server });
             results.push({ label, ok });
             console.log(ok ? '  \x1b[32mPASS\x1b[0m' : '  \x1b[31mFAIL\x1b[0m');

@@ -4,8 +4,11 @@ import { Screens, ClientGameState, UserAnswer } from './IncludeStuff';
 
 // Seconds on the clock for a normal round, and for one being restarted after nobody
 // took part (shorter, because the players are evidently already there and waiting).
-const ROUND_SECONDS = 60;
-const RESTART_SECONDS = 30;
+//
+// Overridable so the tests can watch a real timer fire without sitting for a minute.
+// Nothing in the game should read the env directly - go through these.
+const ROUND_SECONDS = Number(process.env.CNG_ROUND_SECONDS) || 60;
+const RESTART_SECONDS = Number(process.env.CNG_RESTART_SECONDS) || 30;
 
 // Normalize game code to uppercase for case-insensitive matching
 function normalizeCode(code: string): string {
@@ -430,7 +433,7 @@ export class SocketHandlers {
      */
     private beginAnsweringRound(code: string, gameState: GameState, hostText: string, seconds: number): void {
         gameState.setPhase(GamePhase.AnsweringQuestions);
-        gameState.setTimerValue(seconds);
+        this.startPhaseTimer(code, gameState, seconds);
 
         this.sendToHost(code, {
             screen: Screens.h2InformationScreenWithTimer,
@@ -464,7 +467,7 @@ export class SocketHandlers {
     private beginLieRound(code: string, gameState: GameState, targetPlayer: string): void {
         gameState.setCurrentLieTargetPlayer(targetPlayer);
         gameState.setPhase(GamePhase.SubmittingLies);
-        gameState.setTimerValue(ROUND_SECONDS);
+        this.startPhaseTimer(code, gameState, ROUND_SECONDS);
 
         const truth = gameState.getTruthForPlayer(targetPlayer);
 
@@ -496,7 +499,7 @@ export class SocketHandlers {
     /** Everyone except the target votes on the shuffled truth+lies; the target waits. */
     private beginVoting(code: string, gameState: GameState, targetPlayer: string): void {
         gameState.setPhase(GamePhase.VotingOnLies);
-        gameState.setTimerValue(ROUND_SECONDS);
+        this.startPhaseTimer(code, gameState, ROUND_SECONDS);
 
         const truth = gameState.getTruthForPlayer(targetPlayer);
         const lies = gameState.getLiesForPlayer(targetPlayer);
@@ -539,6 +542,8 @@ export class SocketHandlers {
      * a blind timer and race the host (CNG-011).
      */
     private showLieResults(code: string, gameState: GameState, targetPlayer: string): void {
+        // Untimed from here - the host drives it.
+        gameState.stopTimer();
         gameState.calculateLiePoints(targetPlayer);
         gameState.setPhase(GamePhase.ShowingLieResults);
 
@@ -557,6 +562,103 @@ export class SocketHandlers {
             this.sendToUserSockets(code, username, 'gameState', state));
     }
 
+    /**
+     * Start the authoritative countdown for the segment we just entered. The host's
+     * browser still counts down so players see a number, and still sends timerExpired as
+     * a fallback, but the server no longer depends on it: a host who closes their tab used
+     * to take the only clock in the game with them.
+     */
+    private startPhaseTimer(code: string, gameState: GameState, seconds: number): void {
+        gameState.startTimer(seconds, () => {
+            console.log('Server timer fired for game ' + code);
+            this.handleTimerExpiry(code);
+        });
+    }
+
+    /**
+     * What to do when a round runs out of time. Reached from the server's own clock and
+     * from the host's fallback timerExpired; both must behave identically, so neither gets
+     * its own copy.
+     */
+    private handleTimerExpiry(code: string): void {
+        const gameState = this.games[code];
+        if (!gameState) return;
+
+        const phase = gameState.getPhase();
+        const targetPlayer = gameState.getCurrentLieTargetPlayer();
+
+        switch (phase) {
+            case GamePhase.AnsweringQuestions: {
+                // Play on with whatever truths we have. Only start over if there is
+                // nothing at all to work with.
+                const nextTarget = gameState.getNextLieTargetPlayerSkippingMissing();
+                if (nextTarget) {
+                    console.log('Answer timer expired - proceeding with the answers we have');
+                    this.beginLieRound(code, gameState, nextTarget);
+                } else {
+                    console.log('Answer timer expired with no answers - restarting round');
+                    this.restartRound(code, gameState, 'No answers submitted! Please answer the questions.');
+                }
+                break;
+            }
+
+            case GamePhase.SubmittingLies: {
+                if (!targetPlayer) break;
+
+                if (gameState.getLiesForPlayer(targetPlayer).length > 0) {
+                    // At least one lie: there's something to vote on, so vote on it.
+                    console.log('Lie timer expired - voting on the lies we have');
+                    this.beginVoting(code, gameState, targetPlayer);
+                } else if (targetPlayer === gameState.getUserNames()[0]) {
+                    // Nobody lied for the very first target: nothing has happened yet, so
+                    // start the whole round over rather than marching through targets
+                    // nobody is playing along with.
+                    console.log('No lies for the first target - restarting round');
+                    this.restartRound(code, gameState, 'No lies submitted! Starting fresh round.');
+                } else {
+                    console.log('No lies for ' + targetPlayer + ' - skipping to the next target');
+                    this.advanceToNextLieRoundOrEnd(code, gameState);
+                }
+                break;
+            }
+
+            case GamePhase.VotingOnLies: {
+                if (!targetPlayer) break;
+                // Score whatever votes are in and reveal.
+                console.log('Vote timer expired - scoring the votes we have');
+                this.showLieResults(code, gameState, targetPlayer);
+                break;
+            }
+
+            default:
+                // Not a timed phase - nothing to expire.
+                console.log('Ignoring timer expiry for phase: ' + phase);
+        }
+    }
+
+    /**
+     * Restart the clock for any game that was mid-round when the server went down.
+     * Timers can't be serialised, so without this a restored game would sit forever with
+     * nobody's clock running - which would have turned CNG-002's restart-survival into a
+     * game that resumes and then never moves.
+     *
+     * The round gets its full time back rather than the remainder. That's deliberate: the
+     * reason to restart mid-game is to hot-patch code, and taking the players' thinking
+     * time away as a side effect of the developer's rebuild would be its own bug.
+     */
+    resumeTimers(): void {
+        for (const code in this.games) {
+            const gameState = this.games[code];
+            const phase = gameState.getPhase();
+            if (phase === GamePhase.AnsweringQuestions ||
+                phase === GamePhase.SubmittingLies ||
+                phase === GamePhase.VotingOnLies) {
+                console.log('Resuming timer for game ' + code + ' (' + phase + ')');
+                this.startPhaseTimer(code, gameState, ROUND_SECONDS);
+            }
+        }
+    }
+
     /** Move to the next player's lie round, or end the game if there are none left. */
     private advanceToNextLieRoundOrEnd(code: string, gameState: GameState): void {
         const next = gameState.getNextLieTargetPlayerSkippingMissing();
@@ -568,6 +670,7 @@ export class SocketHandlers {
     }
 
     private endGameShowingWinner(code: string, gameState: GameState): void {
+        gameState.stopTimer();
         gameState.setPhase(GamePhase.GameOver);
         const leaderboard = gameState.getLeaderboard();
         const winner = leaderboard[0];
@@ -1096,86 +1199,28 @@ export class SocketHandlers {
             }
         });
 
+        // Fallback only. The server owns the clock (startPhaseTimer); this exists because
+        // the host's browser also counts down, and if the server's timer somehow never
+        // started, the host's is a second chance rather than the only chance.
+        //
+        // Still token-guarded: two host tabs means two of these, and without the guard the
+        // second lands in the phase the first just created and cascades (CNG-003). A
+        // missing token means a stale client bundle - an event we can't place in time is
+        // not one to act on.
         socket.on('timerExpired', ({ code, phaseToken }: { code: string; phaseToken?: number }) => {
             code = normalizeCode(code);
             const gameState = this.games[code];
             if (!gameState) return;
 
-            const phase = gameState.getPhase();
-            console.log('Timer expired for game ' + code + ' phase: ' + phase + ' token: ' + phaseToken);
-
-            // The countdown runs in the host's browser, and hostSocketIds is a list, so
-            // two host tabs means two countdowns and two of these events. Each host-bound
-            // state carries the token of the segment it is timing, and anything that ends
-            // that segment bumps it - so the first event is handled and the rest are
-            // recognised as timers for a segment that is already over.
-            //
-            // Without this the phase check below admits three phases at once, and a second
-            // event lands in the phase the first one just created and cascades:
-            // AnsweringQuestions -> SubmittingLies -> "no lies submitted", restarting the
-            // round or skipping a player with nobody having typed a thing (CNG-003).
-            //
-            // A missing token is rejected too. Every host emit carries one, so absence
-            // means a stale client bundle; allowing it would leave the guard bypassable by
-            // exactly the tab it exists to stop. The host refreshing recovers.
             const currentToken = gameState.getPhaseToken();
             if (phaseToken !== currentToken) {
                 console.log('Ignoring stale timerExpired (token ' + phaseToken + ', current ' + currentToken + ')');
                 return;
             }
 
-            const targetPlayer = gameState.getCurrentLieTargetPlayer();
-
-            switch (phase) {
-                case GamePhase.AnsweringQuestions: {
-                    // Play on with whatever truths we have. Only start over if there is
-                    // nothing at all to work with.
-                    const nextTarget = gameState.getNextLieTargetPlayerSkippingMissing();
-                    if (nextTarget) {
-                        console.log('Answer timer expired - proceeding with the answers we have');
-                        this.beginLieRound(code, gameState, nextTarget);
-                    } else {
-                        console.log('Answer timer expired with no answers - restarting round');
-                        this.restartRound(code, gameState, 'No answers submitted! Please answer the questions.');
-                    }
-                    break;
-                }
-
-                case GamePhase.SubmittingLies: {
-                    if (!targetPlayer) break;
-
-                    if (gameState.getLiesForPlayer(targetPlayer).length > 0) {
-                        // At least one lie: there's something to vote on, so vote on it.
-                        console.log('Lie timer expired - voting on the lies we have');
-                        this.beginVoting(code, gameState, targetPlayer);
-                    } else if (targetPlayer === gameState.getUserNames()[0]) {
-                        // Nobody lied for the very first target: nothing has happened yet,
-                        // so start the whole round over rather than marching through
-                        // targets nobody is playing along with.
-                        console.log('No lies for the first target - restarting round');
-                        this.restartRound(code, gameState, 'No lies submitted! Starting fresh round.');
-                    } else {
-                        console.log('No lies for ' + targetPlayer + ' - skipping to the next target');
-                        this.advanceToNextLieRoundOrEnd(code, gameState);
-                    }
-                    break;
-                }
-
-                case GamePhase.VotingOnLies: {
-                    if (!targetPlayer) break;
-                    // Score whatever votes are in and reveal. Identical whether or not
-                    // everyone voted, which is why this is no longer two branches.
-                    console.log('Vote timer expired - scoring the votes we have');
-                    this.showLieResults(code, gameState, targetPlayer);
-                    break;
-                }
-
-                default:
-                    // Not a timed phase - nothing to expire.
-                    console.log('Ignoring timerExpired for phase: ' + phase);
-            }
+            console.log('Host reported timer expiry for game ' + code);
+            this.handleTimerExpiry(code);
         });
-
 
         socket.on('killServer', () => {
             console.log('Kill server requested');

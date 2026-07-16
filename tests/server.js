@@ -50,13 +50,15 @@ class TestServer {
         this.proc = null;
     }
 
-    static async start() {
+    /** `env` is merged into the server's environment - see CNG_ROUND_SECONDS. */
+    static async start(env = {}) {
         if (!fs.existsSync(SERVER_ENTRY)) {
             throw new Error(`${SERVER_ENTRY} missing - run "npm run build_server" first`);
         }
         const port = await freePort();
         const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cng-test-'));
         const server = new TestServer(port, workDir);
+        server.env = env;
         await server.up();
         return server;
     }
@@ -64,7 +66,8 @@ class TestServer {
     async up() {
         this.proc = spawn('node', [SERVER_ENTRY, String(this.port)], {
             cwd: this.workDir,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env, ...(this.env || {}) }
         });
         this.log = '';
         this.proc.stdout.on('data', d => { this.log += d; });
