@@ -568,3 +568,38 @@ with `<!DOCTYPE html>`, which sailed straight past my "did it serve HTML?" check
 content — `id="root"`, the asset path — never on "some HTML came back". With the fix copied
 into the clone: deps installed themselves, the client built, GET / returned the actual app,
 and a second start skipped everything.
+
+---
+
+## 2026-07-16 — Second full review sweep (CNG-031..041 filed, nothing fixed)
+
+**At the user's direction: spot, don't fix.** The user swapped the session onto a
+different model and asked for a fresh full review while it's available, with fixes left
+for a later session. Eleven findings filed, T14–T21 queued. Line numbers pinned to
+`1486efe`.
+
+**Shape of the findings.** The first sweep (2026-07-15) found structural faults — wrong
+authority, missing resync, discarded exclusions. Those are gone, and the second read
+found none of that class. What's left is *seams*: places where two individually-correct
+mechanisms meet badly. The two that matter most:
+
+- **CNG-031** — name reclaim (the feature the identity decision protects) is
+  case-sensitive while game codes aren't. "Bob" retyping "bob" on a new device forks a
+  ghost player into a live game. This is the honest-player failure mode again, sitting
+  directly on the supported reconnect path.
+- **CNG-032/033 together** — question-pool exhaustion produces players who silently get
+  nothing, then an empty round that restarts forever; and because the server's own
+  transitions call `touch()`, that churning game counts as "active" and the idle sweep
+  can never collect it. Two features (restart-on-empty, activity tracking) each fine
+  alone, jointly an immortal zombie game.
+
+Also worth flagging from the sweep: `selectBestAnswer` can silently discard a voting
+round's scoring (CNG-034), the two resync functions still carry pre-T6 hand-rolled copies
+of `buildResults` (CNG-035 — the exact shape that produced CNG-004/025), and the
+save-on-shutdown guarantee only holds for SIGINT, not SIGTERM (CNG-036), so `kill`,
+systemd, or docker stop lose every game.
+
+**Note for the fixing session:** CNG-034 has a trap — `endGame` looks like the other two
+orphans but is load-bearing for the host-exclusion test *and* for the documented
+host/player screen-split guard. Delete the other two; guard that one. And T20 (mid-round
+joiners) needs the user's answer before any code.

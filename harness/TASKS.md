@@ -23,11 +23,49 @@ the session scratchpad and should be folded into T8.
 
 ## Now
 
-Nothing queued.
+Queue from the 2026-07-16 review sweep (spotted, deliberately not fixed — see PROGRESS).
+Ordered so the decisions come before the code that depends on them.
 
-All five original criticals are fixed, the identity question is settled (see the decision
-note in `ISSUES.md`), and `npm test` covers every one of them. What's left in Backlog is
-small and genuinely optional.
+### T14 — Case-insensitive name reclaim
+Closes **CNG-031**. The reclaim-by-name feature breaks on capitalization: "Bob" retyping
+"bob" forks a ghost player into a live game, stalling quorums and orphaning points. Match
+names trimmed and case-folded, store them as first typed. Fix `identify`'s check the same
+way. Test: rejoin as "bob " after playing as "Bob" — same player, same points, no ghost.
+
+### T15 — Recycle the question pool
+Closes **CNG-032**. Pool exhaustion silently gives players nothing and then restarts the
+empty round forever. Recycle `usedQuestionIndexes` when the pool can't serve everyone.
+Test: pre-drain the pool, start a round, everyone still gets a question.
+
+### T16 — "Activity" means a human did something
+Closes **CNG-033**. Move `touch()` out of `setPhase` and into the socket handlers, so a
+game the server is churning by itself can idle out. Interacts with the CNG-028 backstop —
+see the issue for the test to write.
+
+### T17 — Delete the orphaned mutating handlers
+Closes **CNG-034**, part of **CNG-041**. Remove `selectBestAnswer` and `nextRound`
+(nothing emits them; both can wreck a live round). **Keep `endGame`** — the
+host-exclusion test depends on it and on its host/player screen split — but give it a
+phase guard and `stopTimer()`. Delete the dead H4 screen while there.
+
+### T18 — One ballot order per round; resyncs reuse the transition builders
+Closes **CNG-035**, **CNG-040**. Store the shuffled ballot order on `GameState` (and in
+`toJSON` — it must survive a hot-patch restart). Point the two resync functions at
+`buildResults` and the stored order instead of their pre-T6 hand-rolled copies.
+
+### T19 — Survive SIGTERM; save more than once per lifetime
+Closes **CNG-036**, enables the **CNG-038** runtime sweep. Handle SIGTERM like SIGINT and
+add a periodic/debounced save; prune idle games and their `socketStuff` entries there.
+Test: run restart-survival with SIGTERM.
+
+### T20 — Ask the user: mid-round joiners
+**CNG-037** is a design decision, not just a bug: deal a mid-round joiner in immediately
+(current behaviour, stalls the quorum until the timer) or park them until the next round?
+Get an answer before coding.
+
+### T21 — Server-side name validation
+Closes **CNG-039**. Trim; reject empty and `<host>`; cap length. One guard clause in
+`nameAndEmoji`, shared with T14's canonicalization.
 
 ## Backlog
 

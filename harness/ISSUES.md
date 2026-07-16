@@ -38,6 +38,17 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-028](#cng-028) | High | **Fixed** | The reveal and points screens have no server clock, so an absent host still freezes the game |
 | [CNG-029](#cng-029) | High | **Fixed** | A host on localhost produces a QR code nobody can scan |
 | [CNG-030](#cng-030) | Medium | **Fixed** | A fresh clone serves nothing — the client build is gitignored but the server serves it |
+| [CNG-031](#cng-031) | High | Open | Name reclaim is case- and whitespace-sensitive — retyping "bob" for "Bob" forks a ghost player mid-game |
+| [CNG-032](#cng-032) | High | Open | Question pool exhaustion: players silently get no question, and the empty round restarts forever |
+| [CNG-033](#cng-033) | Medium | Open | Server-driven transitions count as "activity", so an abandoned churning game never idles out |
+| [CNG-034](#cng-034) | Medium | Open | Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame` |
+| [CNG-035](#cng-035) | Medium | Open | The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift |
+| [CNG-036](#cng-036) | Medium | Open | Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save |
+| [CNG-037](#cng-037) | Low | Open | Mid-round joiners are added to the current round's quorum, stalling it until the timer |
+| [CNG-038](#cng-038) | Low | Open | `socketStuff` and in-memory games are never pruned while the server runs |
+| [CNG-039](#cng-039) | Low | Open | Server accepts any name: empty, `<host>`, unbounded length |
+| [CNG-040](#cng-040) | Low | Open | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
+| [CNG-041](#cng-041) | Low | Open | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -998,3 +1009,260 @@ client resolves its server as `undefined`, i.e. whatever origin served the page 
 the built bundle: `const URL = void 0`). `npm run build && npm start` on a laptop *is* the
 deployment. CNG-029's reverse-proxy handling exists because that is the one other way this
 plausibly gets run.
+
+---
+
+## 2026-07-16 review sweep
+
+A second full read of everything, requested by the user after the model handoff, with the
+explicit instruction to **spot, not fix** — the findings below are for a future session to
+work through. All line numbers are against commit `1486efe`. The first sweep's structural
+problems are gone; what's left is mostly seams: places where two mechanisms that are each
+correct meet badly.
+
+---
+
+### CNG-031
+**Name reclaim is case- and whitespace-sensitive — retyping "bob" for "Bob" forks a ghost player mid-game**
+High · Open · `src/socketHandlers.ts:926-944, 53-56`, `src/GameState.ts:154-156`
+
+Game codes are normalized on every handler (`normalizeCode`, `:53`). Names never are:
+`userExists` is a raw `name in users` (`GameState.ts:154`), and `nameAndEmoji` trusts it
+(`:938`).
+
+The reclaim-by-name decision (see the 2026-07-15 decision note) makes typing your name on a
+new device the *supported* reconnect path. So the honest failure is: Bob's phone dies, he
+grabs the tablet, types `bob` — and `userExists('bob')` is false, so a **new player** is
+added to a live game. Now:
+
+- `allUsersHaveAnswered` / `allLiesSubmittedForTarget` / `allVotesSubmittedForTarget`
+  (`GameState.ts:308, 365, 400`) all include the ghost, so the round stalls until the
+  timer bails it out;
+- real-Bob's points are orphaned on the entry he can no longer reach;
+- the leaderboard shows both Bobs.
+
+This is the same class of honest-player failure as CNG-026, sitting directly on the
+feature the identity decision exists to protect. Suggested fix: canonicalize names for
+*matching* (trim + case-fold) while preserving the display form the player first typed —
+i.e. a `findUserByName` used by `nameAndEmoji`/`identify`, not a blanket `toLowerCase` on
+storage, so nobody's name gets visually mangled. `identify`'s `userExists` check (`:900`)
+needs the same treatment or reclaim-by-URL breaks where reclaim-by-typing works.
+
+Test: join as "Bob", answer, reconnect as "bob " — must resync as the same player, same
+points, no ghost in the lobby.
+
+---
+
+### CNG-032
+**Question pool exhaustion: players silently get no question, and the empty round restarts forever**
+High · Open · `src/socketHandlers.ts:484-494, 638-641`, `src/GameState.ts:203-232, 496-500`
+
+The pool is 30 questions. `usedQuestionIndexes` is only ever reset by `resetForNewGame`
+(`startGame`). `restartRound` does **not** recycle it, and every restart draws a fresh
+question per player. Two compounding failures:
+
+1. **The silent player.** When `getNextQuestion()` returns null, `beginAnsweringRound`
+   just skips them — `if (!questionObj) return;` (`:486`). No screen, no message. They sit
+   on whatever they had while the host shows a countdown. With 3 players, ten
+   starts/restarts drain the pool; a party that restarts a few times and then plays a
+   second game gets there in an evening.
+
+2. **The forever-restart.** Nobody gets questions → nobody answers → timer →
+   `handleTimerExpiry` finds no answers → `restartRound` (`:638-641`) → still no questions
+   → timer → … every `RESTART_SECONDS`, indefinitely. The `unattended` test never sees
+   this because it exhausts nothing.
+
+Suggested fix: when the pool can't serve every player, recycle it (`usedQuestionIndexes =
+[]`) at the top of `beginAnsweringRound` — repeats across rounds beat silence. Keep
+per-round uniqueness (players in the same round shouldn't share a question), which the
+recycle preserves since a round draws at most N of 30. Consider also breaking the
+restart loop after a bounded number of consecutive empty rounds (see CNG-033, which is
+what makes this loop immortal).
+
+Test: force `usedQuestionIndexes` to 28/30 used, start a round with 3 players, assert
+every player still receives a question.
+
+---
+
+### CNG-033
+**Server-driven transitions count as "activity", so an abandoned churning game never idles out**
+Medium · Open · `src/GameState.ts:270-274`, `src/index.ts:22-28`
+
+`setPhase` calls `touch()` (`GameState.ts:271`) — which is right for player- and
+host-driven transitions, but the server's own timers also go through `setPhase`. So the
+CNG-032 restart loop, and any timer-driven progression, refreshes `lastActivity` every
+cycle. The 12-hour idle sweep (CNG-016) can never collect a game that is keeping *itself*
+alive: players started a game, walked away, and the server now churns it — timer, restart,
+timer — until the process dies.
+
+The definition is wrong, not the mechanism: **activity should mean a human did
+something.** `touch()` belongs in the socket handlers (submissions, joins, host clicks),
+not inside `setPhase`. `addUser`/`addAnswer`/`addLie`/`addVote` touching is fine — those
+only fire from handlers.
+
+One wrinkle for the fixer: the unattended-game backstop (CNG-028) *deliberately* advances
+games without humans. Under the corrected definition an abandoned game goes idle-stale
+while the backstop walks it to GameOver — that's compatible (GameOver has no timer, then
+the sweep gets it), but the interaction deserves a test: abandon a game entirely, assert
+it reaches GameOver and is dropped at the next save after the idle window, not churned
+forever.
+
+---
+
+### CNG-034
+**Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame`**
+Medium · Open · `src/socketHandlers.ts:1175-1210, 1212-1223, 1247-1270`
+
+Nothing in the client emits any of these (verified by grep across
+`confess_n_guess_client/src`). All three still mutate state, and two have no meaningful
+guard:
+
+- **`selectBestAnswer` (`:1175`)** — callable during `VotingOnLies`. Awards +10 to an
+  arbitrary name and jumps the phase to `ShowingPoints` **without ever calling
+  `calculateLiePoints`** — the round's lies and votes are silently discarded, nobody is
+  scored. It's labeled "legacy … keep for backward compatibility" with nothing to be
+  compatible with.
+- **`nextRound` (`:1212`)** — no phase check at all. One event, at any moment including
+  mid-vote or GameOver, throws the current round away via `restartRound`.
+- **`endGame` (`:1247`)** — no phase guard, and doesn't `stopTimer()` (harmless today only
+  because the token check eats the orphaned interval's completion).
+
+Under the accepted-identity decision these are devtools-only *triggers*, but that decision
+traded risk for a benefit, and dead handlers buy nothing — the same reasoning that removed
+`killServer` (CNG-015). Delete `selectBestAnswer` and `nextRound` outright.
+
+**Caution on `endGame`:** it is load-bearing for the test suite. `host-exclusion.test.js`
+drives it, and that test *depends* on `endGame` sending players `c2` while the host gets
+`h6` — the documented reason the host/player screen difference was kept (see the T6
+PROGRESS note). Keep `endGame`, give it a phase guard (`!== GameOver`) and a `stopTimer()`,
+and leave its screen split alone. Also fold in: delete `Screens.h4…` and
+`H4IterateAnswers.tsx` — no server path ever sends that screen (see CNG-041).
+
+---
+
+### CNG-035
+**The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift**
+Medium · Open · `src/socketHandlers.ts:225-253, 363-372, 375-406`
+
+T6 collapsed the *transitions* to one method each, but the two resync functions predate it
+and kept their own copies of the same constructions:
+
+- `sendHostToCorrectScreen`'s `ShowingLieResults` branch (`:225-253`) rebuilds
+  truth+lies+voters by hand — it is `buildResults` (`:452`), inlined.
+- `sendPlayerToCorrectScreen`'s `ShowingLieResults` branch (`:375-406`) — same again.
+- `sendPlayerToCorrectScreen`'s `VotingOnLies` branch (`:363-372`) rebuilds the ballot and
+  **reshuffles it** (CNG-040 is the user-visible half of that).
+
+This is exactly the shape that produced CNG-004 and CNG-025: a copy that wasn't in the
+one-method-per-transition sweep, drifting. Both branches should call `buildResults`; the
+ballot branch needs the shuffled-order problem solved first (CNG-040), most simply by
+storing the round's shuffled order on the GameState when `beginVoting` creates it and
+having every send — transition and resync alike — reuse it.
+
+---
+
+### CNG-036
+**Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save**
+Medium · Open · `src/index.ts:44-52`
+
+`saveGameState` runs on `process.on('exit')` and `SIGINT`. Node does **not** fire `exit`
+listeners for signals with default handlers, so plain `kill <pid>` (SIGTERM — also what
+systemd and `docker stop` send) terminates the process with every in-flight game
+unsaved. The hot-patch workflow happens to use Ctrl+C, which is why this hasn't bitten,
+but the save-on-restart guarantee (CNG-002) currently depends on *which signal* you use.
+
+Suggested fix: register the same handler for SIGTERM, and add a cheap debounced
+save-on-mutation or a periodic save (the file is small JSON; `writeFileSync` per phase
+transition would be fine at this scale). That also narrows the loss window for genuine
+crashes and power cuts, which no signal handler can cover.
+
+Test: `restart-survival` already exists — parameterize the shutdown signal and run it with
+SIGTERM.
+
+---
+
+### CNG-037
+**Mid-round joiners are added to the current round's quorum, stalling it until the timer**
+Low · Open · `src/socketHandlers.ts:938-944`, `src/GameState.ts:308-311, 365-371, 400-406`
+
+`nameAndEmoji` calls `addUser` in any phase, and every all-submitted predicate is computed
+over the *current* user list. So a newcomer joining during `AnsweringQuestions` makes
+`allUsersHaveAnswered` false again even if everyone else already answered — a round that
+was one submit from advancing now waits for someone who arrived seconds ago (bounded by
+the round timer, which is why this is Low). Same for lies and votes.
+
+It mostly works — the newcomer genuinely can answer/lie/vote, and `sendPlayerToCorrectScreen`
+puts them on the right screen — so this is as much a design decision as a bug: **should a
+mid-round joiner be dealt in immediately, or parked until the next lie round?** Parking is
+simpler and matches how the skip logic already treats players without truths; dealing in
+is friendlier. Decide, then make the quorum predicates match the decision. Flag for the
+user if unsure.
+
+---
+
+### CNG-038
+**`socketStuff` and in-memory games are never pruned while the server runs**
+Low · Open · `src/socketHandlers.ts:80, 884-887`, `src/index.ts:38-42`
+
+The idle sweep runs only at load and save. A long-running server accumulates every game
+ever created (and its `socketStuff` entry — those aren't dropped even when the game is)
+until the process restarts. Disconnects clean *socket ids* out of `socketStuff` but never
+the per-game entry itself. At party scale this is kilobytes and it has an every-Ctrl+C
+safety valve, hence Low — but if CNG-036 adds a periodic save, run the sweep there too and
+delete `socketStuff[code]` alongside the game.
+
+---
+
+### CNG-039
+**Server accepts any name: empty, `<host>`, unbounded length**
+Low · Open · `src/socketHandlers.ts:926-944`
+
+All name validation lives in the client (`C1…Page.tsx:22-30`): trim, non-empty, not
+`<host>`. The server checks nothing. `nameAndEmoji` with `name: ''` or `name: '<host>'`
+is accepted — the latter merges the sender's socket into the host's user entry
+(`userExists('<host>')` is true from `newGame`). Reaching this needs devtools, so it's
+inside the accepted-identity decision, but unlike the accepted items this validation costs
+one guard clause and protects future honest clients (a native app, a different UI) from
+re-learning the client-side rules. Trim + reject empty/`<host>` + cap length (say 40
+chars, the lobby renders these) server-side in `nameAndEmoji`, mirroring the CNG-031 fix.
+
+---
+
+### CNG-040
+**Resync reshuffles the ballot, so a refreshing voter sees the options in a new order**
+Low · Open · `src/socketHandlers.ts:363-372, 546-550`
+
+`beginVoting` shuffles once and sends the same order to everyone (`:547`). A voter who
+refreshes mid-vote hits `sendPlayerToCorrectScreen`, which rebuilds the ballot and calls
+`shuffleArray` again (`:369`) — the options they were just reading reorder under them, and
+no longer match what a neighbour's screen shows. Harmless to scoring (votes are by
+username), confusing to humans mid-decision.
+
+Fix together with CNG-035: persist the round's shuffled order (it belongs on `GameState`
+next to `lies`/`votes`, and in `toJSON` — it must survive the hot-patch restart too, or a
+restart mid-vote reorders every ballot). One stored order, every send reuses it.
+
+---
+
+### CNG-041
+**Client nits, collected**
+Low · Open · various
+
+Small things spotted on the read that don't merit their own entries:
+
+- **`H4IterateAnswers.tsx` and `Screens.h4…` are dead** — no server path ever sends screen
+  4. Delete the component, the enum member, and the `App.tsx` import/branch (do it with
+  CNG-034's cleanup).
+- **`H1CollectingUsersPage` never renders `gameState.text`** — the server's "Need at least
+  2 players to start!" (`socketHandlers.ts:1017-1020`) is invisible. Unreachable via the
+  UI today because the Start button is disabled below 2 players, but the message should
+  either render or stop being sent.
+- **The merge trap is still armed** (noted inside CNG-014, never fixed as such):
+  `setGameState` is `{...prev, ...next}` (`App.tsx:88`), so any field a screen renders but
+  an emit omits shows stale data. Current emits happen to cover the fields current screens
+  read; nothing enforces that for the next screen someone adds. If it bites a third time,
+  consider making `gameState` emits authoritative-complete server-side rather than
+  patching the client.
+- **`resumeTimers` gives restored rounds `ROUND_SECONDS` even if they were on the shorter
+  restart clock** — deliberate-adjacent (full time back is the documented policy), just
+  noting the asymmetry is known rather than overlooked.
