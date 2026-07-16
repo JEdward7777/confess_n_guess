@@ -13,6 +13,7 @@ const TESTS = [
     'join-url.test.js',
     'host-exclusion.test.js',
     'question-stability.test.js',
+    'question-pool.test.js',
     'reconnect.test.js',
     'timer.test.js',
     'multi-device.test.js',

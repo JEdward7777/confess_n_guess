@@ -26,6 +26,44 @@ export interface Vote {
     selectedUsername: string;
 }
 
+const ALL_QUESTIONS: string[] = [
+    "What was the strangest job I've ever had?",
+    "What's the most embarrassing thing that has ever happened to me in public?",
+    "If I could have any superpower, what would it be?",
+    "What's my biggest fear?",
+    "What's the most adventurous thing I've ever done?",
+    "If I could live anywhere in the world, where would it be?",
+    "What's the weirdest food I've ever eaten?",
+    "What's my favorite hobby?",
+    "If I could time travel, which era would I visit first?",
+    "What's the craziest dream I've ever had?",
+    "What was my first pet's name?",
+    "What's my hidden talent that most people don't know about?",
+    "If I could swap lives with any fictional character for a day, who would it be?",
+    "What's the most unusual item in my bucket list?",
+    "What's the strangest phobia I have?",
+    "What's the most memorable vacation I've ever been on?",
+    "What's my go-to comfort food?",
+    "If I could have dinner with any historical figure, who would it be?",
+    "What's the one thing I've always wanted to learn but never got around to?",
+    "What's the silliest nickname I've ever been called?",
+    "What's the most interesting fact about me that surprises people?",
+    "If I could have any animal as a pet, what would it be?",
+    "What's my favorite childhood memory?",
+    "What's the most extreme sport or activity I've ever tried?",
+    "What's the weirdest dream I've ever had?",
+    "What's my favorite genre of music?",
+    "If I could meet any celebrity, who would it be?",
+    "What's my biggest pet peeve?",
+    "What's the most adventurous thing I've eaten?",
+    "If I could be proficient in any language, which one would it be?",
+];
+
+// Tests trim the pool via CNG_QUESTION_COUNT so exhaustion is reachable in seconds
+// instead of ten rounds. Production ignores it and gets the whole bank.
+const QUESTION_POOL: string[] =
+    ALL_QUESTIONS.slice(0, Number(process.env.CNG_QUESTION_COUNT) || ALL_QUESTIONS.length);
+
 export class GameState {
     /**
      * Bump when a change makes older saves unreadable. fromJSON drops anything that
@@ -167,46 +205,26 @@ export class GameState {
     }
 
     // Question management
-    private questions: string[] = [
-        "What was the strangest job I've ever had?",
-        "What's the most embarrassing thing that has ever happened to me in public?",
-        "If I could have any superpower, what would it be?",
-        "What's my biggest fear?",
-        "What's the most adventurous thing I've ever done?",
-        "If I could live anywhere in the world, where would it be?",
-        "What's the weirdest food I've ever eaten?",
-        "What's my favorite hobby?",
-        "If I could time travel, which era would I visit first?",
-        "What's the craziest dream I've ever had?",
-        "What was my first pet's name?",
-        "What's my hidden talent that most people don't know about?",
-        "If I could swap lives with any fictional character for a day, who would it be?",
-        "What's the most unusual item in my bucket list?",
-        "What's the strangest phobia I have?",
-        "What's the most memorable vacation I've ever been on?",
-        "What's my go-to comfort food?",
-        "If I could have dinner with any historical figure, who would it be?",
-        "What's the one thing I've always wanted to learn but never got around to?",
-        "What's the silliest nickname I've ever been called?",
-        "What's the most interesting fact about me that surprises people?",
-        "If I could have any animal as a pet, what would it be?",
-        "What's my favorite childhood memory?",
-        "What's the most extreme sport or activity I've ever tried?",
-        "What's the weirdest dream I've ever had?",
-        "What's my favorite genre of music?",
-        "If I could meet any celebrity, who would it be?",
-        "What's my biggest pet peeve?",
-        "What's the most adventurous thing I've eaten?",
-        "If I could be proficient in any language, which one would it be?",
-    ];
+    private questions: string[] = QUESTION_POOL;
 
     getNextQuestion(): { question: string; index: number } | null {
-        const availableQuestions = this.questions.filter((_, index) => 
+        if (this.questions.length === 0) {
+            return null;
+        }
+
+        let availableQuestions = this.questions.filter((_, index) =>
             !this.usedQuestionIndexes.includes(index)
         );
-        
+
         if (availableQuestions.length === 0) {
-            return null;
+            // The pool ran dry. Recycle it rather than returning null: pre-fix, null meant
+            // beginAnsweringRound silently sent that player nothing and the empty round
+            // restarted forever (CNG-032). A player may eventually see a question repeat
+            // from an earlier round; repeats beat silence. Within a single round questions
+            // stay unique whenever the pool is at least as large as the player count,
+            // since one round draws at most one question per player.
+            this.usedQuestionIndexes = [];
+            availableQuestions = [...this.questions];
         }
 
         const randomIndex = Math.floor(Math.random() * availableQuestions.length);

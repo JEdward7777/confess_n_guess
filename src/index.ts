@@ -21,8 +21,8 @@ const games: { [gameCode: string]: GameState } = {};
 
 // Games idle longer than this are dropped rather than saved or loaded. Long enough to
 // survive a restart mid-game (the point of saving at all), short enough that the store
-// doesn't grow forever.
-const GAME_MAX_IDLE_MS = 12 * 60 * 60 * 1000; // 12 hours
+// doesn't grow forever. Overridable so tests can watch the sweep work in seconds.
+const GAME_MAX_IDLE_MS = Number(process.env.CNG_GAME_MAX_IDLE_MS) || 12 * 60 * 60 * 1000; // 12 hours
 
 function isExpired(gameState: GameState): boolean {
     return Date.now() - gameState.getLastActivity() > GAME_MAX_IDLE_MS;
