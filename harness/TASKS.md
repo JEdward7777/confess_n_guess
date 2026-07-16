@@ -13,7 +13,8 @@ Written alongside the 2026-07-15 sweep; five tasks landed the same day (see Done
 - **T5** — full state serialization + idle sweep (CNG-002, -016). `c494f4c`
 - **T13** — assigned questions stored server-side (CNG-006). `318dae1`
 - **T3 (correctness half)** — timer cascade + blind timeouts (CNG-003, -011, -025). `1e8912f`
-- **T6** — one method per transition; -520 lines (CNG-023, -010, -013, -014, part of -022).
+- **T6** — one method per transition; -520 lines (CNG-023, -010, -013, -014, part of -022). `25d439f`
+- **T8** — integration suite behind `npm test` (CNG-021).
 
 Every one was verified against a running server, not just compiled. Scripts live in
 the session scratchpad and should be folded into T8.
@@ -41,20 +42,6 @@ working — that's why it's token-on-reclaim rather than simply rejecting duplic
 T6 landed first, so there's now one place per transition to thread identity through.
 
 ## Next
-
-### T8 — Land the verification scripts as a test suite
-Closes **CNG-021**.
-
-**Most of the work is already done and is being thrown away every session.** Eight
-scripts now exist that drive real sockets: `verify_fullgame` (host + 3 players through
-every round to the winner), plus one each for CNG-001/002/003/004/005/006. They live in
-the session scratchpad, which is the wrong place — they should be in the repo behind
-`npm test`.
-
-Needed: move them in, give them a runner that starts a server on a spare port and tears
-it down, and make the two-phase restart test (`verify_cng002`) work under it. They found
-CNG-024 and CNG-025 unaided; every regression they'd catch is one that currently reaches
-a live game.
 
 ## Backlog
 

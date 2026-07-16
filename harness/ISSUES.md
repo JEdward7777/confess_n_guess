@@ -29,7 +29,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-018](#cng-018) | Medium | **Fixed** | `identifyMe` can arrive before the client's listener is attached |
 | [CNG-019](#cng-019) | Medium | Open | Any client can claim to be the host of any game |
 | [CNG-020](#cng-020) | Low | Open | Self-vote only prevented client-side |
-| [CNG-021](#cng-021) | High | Open | No automated test can reach any of this |
+| [CNG-021](#cng-021) | High | **Fixed** | No automated test can reach any of this |
 | [CNG-022](#cng-022) | Low | Partly fixed | Dead code: server-side timer, `sendToUserSockets` |
 | [CNG-023](#cng-023) | **High** | **Fixed** | ~700 lines of duplicated phase-transition logic |
 | [CNG-025](#cng-025) | High | **Fixed** | A restarted round isn't fresh — keeps the old target pointer, lies and votes |
@@ -579,7 +579,26 @@ client can vote for its own lie for 500 a head. Enforce in `addVote`.
 
 ### CNG-021
 **No automated test can reach any of this**
-High · Open · `package.json:12`
+High · **Fixed 2026-07-15** · `package.json:12`
+
+> Fixed: `npm test` runs six integration tests that drive real socket.io clients against
+> a real server — `tests/`. Each gets a freshly started server on a free port in its own
+> scratch directory, so tests can't leak state into each other or touch the real
+> `games.json`.
+>
+> | test | guards |
+> |---|---|
+> | `host-exclusion` | CNG-001 |
+> | `question-stability` | CNG-006 |
+> | `reconnect` | CNG-005, -007, -024 |
+> | `timer` | CNG-003, -004, -014, -025 |
+> | `fullgame` | every transition, scoring, a whole game to the winner |
+> | `restart-survival` | CNG-002 — guards the hot-patch-a-live-game workflow |
+>
+> **Confirmed non-vacuous**: reverting the `except()` fix turns `host-exclusion` red
+> (`host saw [6,8]`), and removing the target check turns `reconnect` red
+> (`target refresh -> c4Vote, wanted c2Waiting`). A green suite you have never seen fail
+> is not evidence of anything.
 
 `"test": "echo \"Error: no test specified\" && exit 1"`. Every issue in this register
 was found by reading, and can only be verified by hand-driving four browser tabs.

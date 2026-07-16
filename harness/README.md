@@ -21,8 +21,8 @@ rules — put them here, not there.
 A "unit of work" is one coherent change that leaves the tree in a working state,
 typically one task from `TASKS.md` or one issue fixed. Each check-in:
 
-1. `npx tsc --noEmit` in the repo root **and** in `confess_n_guess_client/` — both
-   must pass.
+1. `npm test` — green. And `npx tsc --noEmit` in the repo root **and** in
+   `confess_n_guess_client/`.
 2. Update the issue's status in `ISSUES.md` and append to `PROGRESS.md`.
 3. Commit the code and the harness update together, referencing the issue id
    (e.g. `Fix host receiving player screens (CNG-001)`).
@@ -69,20 +69,30 @@ not just compiled.
 
 ## Verification protocol
 
-There are no tests (`npm test` is a stub that exits 1 — CNG-021). "Verified" means
-running the server and driving the affected path, **including a mid-game refresh of
-both a player and the host** — that's where the bugs in this codebase live. Either
-hand-drive a host plus three player tabs, or drive real sockets from a script.
+    npm test              # build the server, then run the integration suite
+    npm test -- reconnect # just the tests matching "reconnect"
 
-Scripted verification has worked well and is much faster than four browser tabs; the
-scripts written so far are noted in `PROGRESS.md`. Folding them into a real test suite
-is T8/CNG-021, and is the highest-leverage remaining item — reading found 23 issues,
-but *running* the thing found CNG-024 in minutes.
+`tests/` drives real socket.io clients against a real server — a host and three players,
+through whole games. That is the only kind of test worth writing here: nearly every bug
+in this project has been about *what the server sends to whom*, which only a real client
+can see. Each test gets a freshly started server on a free port in its own scratch
+directory, so nothing leaks between tests or into the real `games.json`.
 
-When starting a server to verify against, **confirm it actually bound the port** and
-that no earlier one is still holding it (`pgrep -af '[d]ist/index.js'`). An orphaned
-server from a previous run silently serves the old build and produces false results.
-Note `pkill -f` will match your own shell if the pattern appears in the command line.
+**Run `npm test` before every check-in.** A fix isn't `Fixed` until the suite is green
+*and* the behaviour has been seen working — for anything the suite can't reach, drive a
+host plus three player tabs by hand, **including a mid-game refresh of both a player and
+the host**, which is where the bugs live.
+
+**Add a test with a bug fix, and watch it fail first.** Every issue found by running
+rather than reading (CNG-024, CNG-025) came from a test written to check something else.
+A green suite you have never seen go red is not evidence of anything — revert the fix,
+confirm the test catches it, then put the fix back.
+
+If you do need a server by hand: **confirm it actually bound the port** and that no
+earlier one is still holding it (`pgrep -af '[d]ist/index.js'`), or you will test a
+stale build and get a false result. Never use `pkill -f` with a pattern that appears in
+your own command line — it matches the shell and kills it. Both mistakes have cost real
+time here; `tests/server.js` avoids them by tracking the pid.
 
 ## Things to know about this codebase
 
@@ -95,7 +105,15 @@ Note `pkill -f` will match your own shell if the pattern appears in the command 
 - Identity is currently client-asserted: handlers trust the `name` in the event
   payload. This is the root cause of most reconnection bugs (CNG-009). Prefer fixes
   that move identity server-side.
-- The phase countdown currently runs in the *host's browser*, not the server
-  (CNG-003). `GameState.startTimer` exists and is unused.
-- The phase-transition logic is copy-pasted several times over and has already
-  drifted apart (CNG-023). If you're fixing one copy, check the others.
+- The phase countdown runs in the *host's browser*, not the server. Duplicate and stale
+  countdowns are handled by the phase token (CNG-003), but the clock still lives in a
+  browser, so a host who closes their tab stalls the game. `GameState.startTimer` is
+  written, unused, and kept **on purpose** — it's the mechanism for that fix (T3
+  remainder). Don't "clean it up".
+- Phase transitions live in one method each (`beginLieRound`, `beginVoting`,
+  `showLieResults`, …). Keep it that way: when these were hand-copied they drifted and
+  produced CNG-004, -014 and -025 (CNG-023).
+- `endGame` sends players `c2` while `continueFromScores` sends `h6`. That inconsistency
+  is deliberate — the `host-exclusion` test proves the host is excluded from player-only
+  broadcasts by checking the two land on *different* screens. Unify them and the test
+  goes quiet without going red.

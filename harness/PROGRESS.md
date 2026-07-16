@@ -315,3 +315,41 @@ currently being thrown away every session.
 
 **Next: T7 (server-side identity)** — the last structural root cause. Handlers still
 trust the `name` in the payload.
+
+---
+
+## 2026-07-15 — T8: the verification scripts are now the test suite (CNG-021)
+
+**Done, and it should have been done sooner.** The user pointed out the contradiction:
+I'd called the full-game test the most valuable thing here and simultaneously left it in
+a session-scoped scratch directory that gets discarded, then filed "move it" as a future
+task. Calling something valuable and leaving it somewhere temporary is not a plan.
+
+`npm test` now builds the server and runs six integration tests in `tests/`:
+
+| test | guards |
+|---|---|
+| `host-exclusion` | CNG-001 |
+| `question-stability` | CNG-006 |
+| `reconnect` | CNG-005, -007, -024 |
+| `timer` | CNG-003, -004, -014, -025 |
+| `fullgame` | every transition, scoring, a whole game to the winner |
+| `restart-survival` | CNG-002 — guards the hot-patch-a-live-game workflow |
+
+Each test gets a freshly started server on a free port in its own temp directory, so
+nothing leaks between tests or touches the real `games.json`. `tests/server.js` tracks
+the node pid directly — the two false results this session both came from server
+lifecycle mistakes (an orphan holding the port, `pkill -f` matching my own shell), so the
+runner is built to make those impossible rather than trusting anyone to remember.
+
+The scripts each had their own copy of client setup and an absolute path to
+`socket.io-client`. Copying that duplication into the repo right after T6 would have been
+a poor lesson to take from T6, so it's factored into `tests/helpers.js`.
+
+**Confirmed non-vacuous, which matters more than the green.** Reverted the `except()` fix
+→ `host-exclusion` goes red with `host saw [6,8]`. Removed the target check → `reconnect`
+goes red with `target refresh -> c4Vote, wanted c2Waiting`. Both restored; 6/6 green. A
+green suite nobody has watched fail is not evidence. That rule is now in the README.
+
+**Next: T7 (server-side identity)** — the last structural root cause, and now the only
+task left that a test suite would want to stand behind.

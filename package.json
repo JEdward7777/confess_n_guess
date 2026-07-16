@@ -8,7 +8,8 @@
     "build_server": "tsc",
     "build_client": "(cd confess_n_guess_client && npm run build)",
     "build": "npm run build_client && npm run build_server",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run build_server && node tests/run.js",
+    "test:only": "node tests/run.js"
   },
   "author": "Joshua Lansford",
   "license": "MIT",
