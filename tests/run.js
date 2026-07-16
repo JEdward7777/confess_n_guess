@@ -16,6 +16,7 @@ const TESTS = [
     'timer.test.js',
     'multi-device.test.js',
     'timer-fires.test.js',
+    'unattended.test.js',
     'fullgame.test.js',
     'restart-survival.test.js'
 ];

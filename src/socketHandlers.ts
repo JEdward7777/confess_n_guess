@@ -10,6 +10,14 @@ import { Screens, ClientGameState, UserAnswer } from './IncludeStuff';
 const ROUND_SECONDS = Number(process.env.CNG_ROUND_SECONDS) || 60;
 const RESTART_SECONDS = Number(process.env.CNG_RESTART_SECONDS) || 30;
 
+// How long the reveal and points screens wait before moving on by themselves.
+//
+// A backstop, NOT a competing clock. The host drives these screens: H3 paces a two-stage
+// reveal at ~4s an entry and then gives 60s to read it, so anything near 60 would fire
+// mid-reveal and cut the host off. This only exists to answer "nobody is driving" - the
+// same relationship timerExpired has to the server's own timer (CNG-028).
+const BACKSTOP_SECONDS = Number(process.env.CNG_BACKSTOP_SECONDS) || 240;
+
 // Normalize game code to uppercase for case-insensitive matching
 function normalizeCode(code: string): string {
     return code?.toUpperCase() ?? '';
@@ -542,10 +550,10 @@ export class SocketHandlers {
      * a blind timer and race the host (CNG-011).
      */
     private showLieResults(code: string, gameState: GameState, targetPlayer: string): void {
-        // Untimed from here - the host drives it.
-        gameState.stopTimer();
         gameState.calculateLiePoints(targetPlayer);
         gameState.setPhase(GamePhase.ShowingLieResults);
+        // The host drives this screen; the backstop only covers them not being there.
+        this.startPhaseTimer(code, gameState, BACKSTOP_SECONDS);
 
         // Not shuffled: H3 sorts these itself (lies first, truth last) for the reveal, so
         // one of the old copies shuffling and the other not made no visible difference -
@@ -630,8 +638,20 @@ export class SocketHandlers {
                 break;
             }
 
+            // The two screens the host normally drives. Reaching these means nobody is
+            // driving - the host's tab is gone - so carry on without them (CNG-028).
+            case GamePhase.ShowingLieResults:
+                console.log('Nobody advanced the reveal - showing points');
+                this.showPoints(code, gameState);
+                break;
+
+            case GamePhase.ShowingPoints:
+                console.log('Nobody advanced the points screen - moving on');
+                this.advanceToNextLieRoundOrEnd(code, gameState);
+                break;
+
             default:
-                // Not a timed phase - nothing to expire.
+                // CollectingUsers and GameOver: nothing to move on to.
                 console.log('Ignoring timer expiry for phase: ' + phase);
         }
     }
@@ -655,8 +675,30 @@ export class SocketHandlers {
                 phase === GamePhase.VotingOnLies) {
                 console.log('Resuming timer for game ' + code + ' (' + phase + ')');
                 this.startPhaseTimer(code, gameState, ROUND_SECONDS);
+            } else if (phase === GamePhase.ShowingLieResults || phase === GamePhase.ShowingPoints) {
+                // Host-driven screens still need their backstop back, or a game restored
+                // here with no host would hang exactly as CNG-028 describes.
+                console.log('Resuming backstop for game ' + code + ' (' + phase + ')');
+                this.startPhaseTimer(code, gameState, BACKSTOP_SECONDS);
             }
         }
+    }
+
+    /**
+     * Show the round's points. Reached from the host clicking Continue and from the
+     * backstop when there is no host - one method, so they cannot drift (CNG-023).
+     */
+    private showPoints(code: string, gameState: GameState): void {
+        gameState.setPhase(GamePhase.ShowingPoints);
+        this.startPhaseTimer(code, gameState, BACKSTOP_SECONDS);
+
+        const state: ClientGameState = {
+            screen: Screens.h5ShowThePointsForTheRound,
+            text: 'Points for this round!',
+            leaderboard: gameState.getLeaderboard()
+        };
+        this.sendToHost(code, state);
+        this.sendToPlayers(code, state);
     }
 
     /** Move to the next player's lie round, or end the game if there are none left. */
@@ -1146,19 +1188,7 @@ export class SocketHandlers {
             const gameState = this.games[code];
             
             if (gameState && gameState.getPhase() === GamePhase.ShowingLieResults) {
-                gameState.setPhase(GamePhase.ShowingPoints);
-                
-                this.sendToHost(code, {
-                    screen: Screens.h5ShowThePointsForTheRound,
-                    text: 'Points for this round!',
-                    leaderboard: gameState.getLeaderboard()
-                });
-                
-                this.sendToPlayers(code, {
-                    screen: Screens.h5ShowThePointsForTheRound,
-                    text: 'Points for this round!',
-                    leaderboard: gameState.getLeaderboard()
-                });
+                this.showPoints(code, gameState);
             }
         });
 

@@ -1,7 +1,7 @@
 //@ts-ignore
 import { socket } from './socket';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 import { ClientGameState } from './../../src/IncludeStuff';
 
@@ -93,21 +93,27 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         }
     }, [stage, currentIndex, sortedAnswers.length, allDone]);
 
-    // Auto-continue timer: 60 seconds after all revealed (for host only)
+    // Auto-continue timer: 60 seconds after all revealed (for host only). The host drives
+    // this screen; the server only has a long backstop for when there is no host at all,
+    // deliberately far longer than the reveal takes so it never cuts this short (CNG-028).
     const [countdown, setCountdown] = useState<number | null>(null);
+    const hasContinued = useRef(false);
 
     useEffect(() => {
-        if (allDone && isHost && countdown === null) {
-            setCountdown(60);
-        }
+        if (!allDone || !isHost) return;
 
-        if (countdown !== null && countdown > 0) {
+        if (countdown === null) {
+            setCountdown(60);
+            return;
+        }
+        if (countdown > 0) {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
-        } else if (countdown === 0) {
-            // Auto-continue when timer expires
+        }
+        // Fire once and stay at zero - resetting to null re-armed this forever (CNG-017).
+        if (!hasContinued.current) {
+            hasContinued.current = true;
             handleContinue();
-            setCountdown(null);
         }
     }, [allDone, isHost, countdown]);
 

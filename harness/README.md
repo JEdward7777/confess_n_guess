@@ -69,8 +69,11 @@ not just compiled.
 
 ## Verification protocol
 
-    npm test              # build the server, then run the integration suite
+    npm test              # build the server, then run the integration suite (~2 min)
     npm test -- reconnect # just the tests matching "reconnect"
+
+Two tests wait on real timers (`timer-fires`, `unattended`), which is why the suite takes
+minutes rather than seconds. That waiting is the point — see below.
 
 `tests/` drives real socket.io clients against a real server — a host and three players,
 through whole games. That is the only kind of test worth writing here: nearly every bug
@@ -87,6 +90,13 @@ the host**, which is where the bugs live.
 rather than reading (CNG-024, CNG-025) came from a test written to check something else.
 A green suite you have never seen go red is not evidence of anything — revert the fix,
 confirm the test catches it, then put the fix back.
+
+**Watch what a test doesn't cover, too.** `fullgame` walks a whole game but submits
+everything promptly, so no timer has ever fired inside it — the server clock could be
+deleted and it would stay green (measured, CNG-027). `timer-fires` abandons the game
+during a *timed* phase, so it stayed green while the reveal froze forever (measured,
+CNG-028). A walkthrough only guards what it waits for. When a test passes and you're about
+to conclude something broader from it, check whether it could have failed.
 
 If you do need a server by hand: **confirm it actually bound the port** and that no
 earlier one is still holding it (`pgrep -af '[d]ist/index.js'`), or you will test a

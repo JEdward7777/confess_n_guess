@@ -441,3 +441,45 @@ running after a restart. Round lengths are overridable via `CNG_ROUND_SECONDS` s
 seconds rather than a minute.
 
 8/8 green. Nothing dead left in `GameState` or `socketHandlers`. Nothing queued.
+
+---
+
+## 2026-07-15 — CNG-028: an abandoned game keeps moving (also CNG-017)
+
+**Fixing a claim I got wrong.** Last session I said CNG-027 meant "the game no longer
+depends on the host's browser at all". It doesn't. It covers the three *timed* phases. The
+reveal and points screens are untimed server-side, and the only things advancing them are
+the auto-continue timers inside H3 and H5 — in the host's tab. Close it at the reveal and
+the game stops forever. Measured before writing any fix: host closed, three players voted
+to the reveal, all three sat on `h3Results` and stayed.
+
+Wrote the test first, at the user's direction, and it caught two flaws before the code did:
+
+1. Its first draft passed two assertions **vacuously** — "have they left the points screen"
+   is trivially true when they never reached it. Rewrote to wait for states to *arrive*,
+   never to be left behind.
+2. The real failure then pinned cleanly: `stuck on alice:h3Results bob:h3Results
+   carol:h3Results`.
+
+Fix: `BACKSTOP_SECONDS` (240s) on entering `ShowingLieResults`/`ShowingPoints`, with
+`handleTimerExpiry` cases that carry on without the host. `showPoints` extracted so the
+host's Continue and the backstop share one path (CNG-023's lesson). `resumeTimers` covers
+these phases too.
+
+**240s, not 60, on purpose.** The host drives these screens; H3 paces its reveal at ~4s an
+entry and then gives 60s to read. A 60s backstop would fire mid-reveal and cut the host
+off. It is a backstop, not a competing clock — the same relationship `timerExpired` has to
+the server's timer.
+
+CNG-017 fixed alongside in both H3 and H5: fire once via a ref and stay at zero rather than
+resetting to `null` and retriggering the arming branch. I'd filed it cosmetic because the
+screen normally changes underneath it — which was only true *because* these timers were the
+sole thing advancing two phases.
+
+**The non-vacuity check is the headline.** With the backstop reverted, **8 of 9 pass** —
+including `timer-fires`, the exact test I generalised from. It abandons the game during a
+timed phase, which is the part that already worked. Only `unattended` catches the freeze.
+Two sessions running, a green test has led me to a conclusion broader than it earned; that
+warning is now in the README next to the "watch it fail first" rule.
+
+9/9 green.

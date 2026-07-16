@@ -25,7 +25,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-014](#cng-014) | Medium | **Fixed** | Skip path omits `targetPlayer`, client submits against a stale target |
 | [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
 | [CNG-016](#cng-016) | Medium | **Fixed** | Games are never expired — 37 stale games on disk |
-| [CNG-017](#cng-017) | Medium | Open | H5 auto-continue re-arms forever |
+| [CNG-017](#cng-017) | Medium | **Fixed** | H5 auto-continue re-arms forever |
 | [CNG-018](#cng-018) | Medium | **Fixed** | `identifyMe` can arrive before the client's listener is attached |
 | [CNG-019](#cng-019) | Medium | **Won't fix** | Any client can claim to be the host of any game |
 | [CNG-020](#cng-020) | **High** | **Fixed** | Self-vote only prevented client-side |
@@ -34,6 +34,8 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-023](#cng-023) | **High** | **Fixed** | ~700 lines of duplicated phase-transition logic |
 | [CNG-025](#cng-025) | High | **Fixed** | A restarted round isn't fresh — keeps the old target pointer, lies and votes |
 | [CNG-026](#cng-026) | High | **Fixed** | Post-submit confirmations only reach the submitting socket, so sibling tabs stay live |
+| [CNG-027](#cng-027) | High | **Fixed** | The only clock lived in the host's browser, so a host closing their tab froze the game |
+| [CNG-028](#cng-028) | High | **Fixed** | The reveal and points screens have no server clock, so an absent host still freezes the game |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -564,7 +566,15 @@ written to the process CWD and is currently tracked in git — it probably belon
 
 ### CNG-017
 **H5 auto-continue re-arms forever**
-Medium · Open · `confess_n_guess_client/src/H5ShowPoints.tsx:21-36`
+Medium · **Fixed 2026-07-15** · `confess_n_guess_client/src/H5ShowPoints.tsx:21-36`
+
+> Fixed in both H5 and H3 (same bug, both copies): fire once via a `hasContinued` ref and
+> stay at zero, instead of resetting `countdown` to `null` and retriggering the arming
+> branch. Mirrors what `H2InformationScreenWithTimer` already did.
+>
+> Filed as cosmetic because the screen normally changes underneath it. That was only true
+> *because* these timers are load-bearing — they were the sole thing advancing two phases
+> (CNG-028). Fixed alongside it.
 
 ```ts
 if (isHost && countdown === null) setCountdown(60);
@@ -853,3 +863,46 @@ reverted, `fullgame` and all six other tests stayed **green** — fullgame submi
 promptly and finishes in ~6s against a 60s clock, so no timer ever fires in it, and the
 `timer` test emits `timerExpired` by hand rather than waiting. Only `timer-fires` caught it.
 A full walkthrough is not automatically a guard against everything it walks past.
+
+---
+
+### CNG-028
+**The reveal and points screens have no server clock, so an absent host still freezes the game**
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts`, `H3ShowLiesAndTruths.tsx:99-111`, `H5ShowPoints.tsx:21-36`
+
+> Fixed: `BACKSTOP_SECONDS` (240s, `CNG_BACKSTOP_SECONDS`) started on entering
+> `ShowingLieResults` and `ShowingPoints`, with `handleTimerExpiry` cases that carry on
+> without the host. `showPoints` extracted so the host's Continue and the backstop share
+> one path. `resumeTimers` covers these phases too, or a game restored at the reveal with
+> no host would hang exactly as described.
+>
+> Deliberately 240s, not 60: the host drives these screens and H3 paces a reveal at ~4s an
+> entry then gives 60s to read — a 60s backstop would fire mid-reveal and cut the host off.
+> It answers "nobody is driving", nothing more.
+>
+> **Confirmed non-vacuous, and the result is the point**: with the backstop reverted, 8 of
+> 9 tests pass — including `timer-fires`, the test I generalised from when I claimed the
+> game no longer depended on the host at all. Only `unattended` catches it.
+
+CNG-027 moved the countdown onto the server for the three *timed* phases, and the
+`timer-fires` test proves a round times out with no host connected. **That result does not
+generalise, and I claimed it did.**
+
+`ShowingLieResults` and `ShowingPoints` are untimed server-side. The only things that
+advance them are `continueFromResults` and `continueFromScores`, and the only things that
+emit those are the auto-continue timers inside `H3ShowLiesAndTruths` and `H5ShowPoints` —
+i.e. the host's browser. Close that tab at the reveal and the game stops forever.
+
+Measured: host closed, three players voted through to the reveal, waited 6s on a 2s round
+clock. All three sat on `h3Results` and stayed there.
+
+The fix is the same shape as CNG-027, with one difference that matters: the server's timer
+here must be a **long backstop, not a competing clock**. H3 paces a two-stage reveal at
+~4s per entry and then gives the host 60s to read it, so a 60s server timer would fire
+mid-reveal and cut the host off. The backstop exists only to say "nobody is driving, move
+on"; the host's auto-continue stays primary because it's paced to the animation. Same
+relationship `timerExpired` now has to `startPhaseTimer`.
+
+CNG-017 (the H3/H5 auto-continue re-arming forever) is the same code and is fixed
+alongside — it is only cosmetic *because* these timers normally unmount, and they are
+load-bearing until this is fixed.

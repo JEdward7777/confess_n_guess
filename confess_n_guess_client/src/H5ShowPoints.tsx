@@ -1,7 +1,7 @@
 //@ts-ignore
 import { socket } from './socket';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 import { ClientGameState, LeaderboardEntry } from './../../src/IncludeStuff';
 
@@ -15,23 +15,31 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
     const isHost = gameState.name === '<host>';
     const code = gameState.sharedState?.code;
     
-    // Auto-continue timer: 60 seconds
+    // Auto-continue timer: 60 seconds. The host drives this screen; the server only has a
+    // long backstop for when there is no host at all (CNG-028).
     const [countdown, setCountdown] = useState<number | null>(null);
-    
+    const hasContinued = useRef(false);
+
     useEffect(() => {
-        if (isHost && countdown === null) {
+        if (!isHost) return;
+
+        if (countdown === null) {
             setCountdown(60);
+            return;
         }
-        
-        if (countdown !== null && countdown > 0) {
+        if (countdown > 0) {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
-        } else if (countdown === 0) {
-            // Auto-continue when timer expires
+        }
+        // Fire once and stay at zero. This used to reset countdown to null, which
+        // retriggered the arming branch above and re-armed at 60 forever - invisible
+        // while the screen changes underneath it, but a silent 60s re-emit loop whenever
+        // it didn't (CNG-017).
+        if (!hasContinued.current) {
+            hasContinued.current = true;
             if (code) {
                 socket.emit('continueFromScores', { code });
             }
-            setCountdown(null);
         }
     }, [isHost, countdown, code]);
 
