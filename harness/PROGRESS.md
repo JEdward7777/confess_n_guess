@@ -603,3 +603,40 @@ systemd, or docker stop lose every game.
 orphans but is load-bearing for the host-exclusion test *and* for the documented
 host/player screen-split guard. Delete the other two; guard that one. And T20 (mid-round
 joiners) needs the user's answer before any code.
+
+---
+
+## 2026-07-16 — The review batch lands: CNG-031/032/033/034/037/039 fixed, red-first
+
+**The user directed the order and the method:** test to prove each bug first, then fix,
+then green-light the test. Every fix in this batch ran that way, and the red runs were
+worth having — each one produced the filed symptom verbatim ("only [alice] got one; bob
+emits:[]", "still saved with phase answeringQuestions; churn counted as activity",
+"players: [<host>,Alice,Bob,Carol, ALICE ]").
+
+**Decisions recorded:**
+- **T20 ruled:** once a game starts, unmatched names watch, never join the board; matching
+  is case-insensitive. Implemented as spectators — tracked per-socket, never in `users`,
+  they follow reveals/points/winner and can play next game. This closed CNG-037 outright
+  rather than needing a quorum patch.
+- **CNG-036 remains the user's call** — recommendation delivered (SIGTERM handler, three
+  lines), "may just leave it" is a legitimate outcome; record it either way.
+
+**Fixes:** pool recycles instead of going silent (CNG-032); `touch()` moved to
+human-driven handlers so abandoned churn can't keep a game alive (CNG-033, with a control
+asserting live games still survive); `selectBestAnswer`/`nextRound` deleted after
+verifying at three layers — source, served bundle, git history (which showed they *were*
+once emitted: genuine legacy, not never-used); `endGame` kept for the host-exclusion test
+but guarded; H4 removed; names match trimmed/case-folded with stored spelling preserved,
+and the server now validates names at all (CNG-031, -039).
+
+**One test-helper bug caught by its own red run:** the `connect()` helper never captured
+`st.name`, so "client is told its canonical name" failed against a working server. The
+helper was the bug. Worth remembering that a red assertion indicts the test as often as
+the code.
+
+**Suite: 13/13.** Two tests were updated to the new ruling (`reconnect`'s unknown-name
+expectation changed from "pick a name" to "watches" — behavior change, not regression).
+
+Remaining open: T18 (ballot order + resync dedup), T19/CNG-036 (user decision), the two
+H1/merge nits in CNG-041, CNG-038 (runtime pruning).

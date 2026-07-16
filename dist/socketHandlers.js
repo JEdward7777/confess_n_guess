@@ -52,6 +52,23 @@ function getLanHost() {
     candidates.sort((a, b) => rank(a) - rank(b));
     return (_a = candidates[0]) !== null && _a !== void 0 ? _a : null;
 }
+/**
+ * Server-side name validation. The client validates too, but the server can't rely on
+ * that - and the rules were previously only in the client (CNG-039). Returns the trimmed
+ * name, or null if it isn't usable.
+ */
+function validateName(name) {
+    if (typeof name !== 'string')
+        return null;
+    const trimmed = name.trim();
+    if (!trimmed)
+        return null;
+    if (trimmed.toLowerCase() === '<host>')
+        return null;
+    if (trimmed.length > 40)
+        return null; // the lobby and reveal render these
+    return trimmed;
+}
 // Normalize game code to uppercase for case-insensitive matching
 function normalizeCode(code) {
     var _a;
@@ -92,6 +109,14 @@ class SocketHandlers {
         // Send to all sockets for this user
         socketIds.forEach(socketId => {
             this.io.to(socketId).emit(event, data);
+        });
+    }
+    sendToSpectators(code, data) {
+        const socketInfo = this.socketStuff[code];
+        if (!socketInfo || !socketInfo.spectatorSockets)
+            return;
+        socketInfo.spectatorSockets.forEach(socketId => {
+            this.io.to(socketId).emit('gameState', data);
         });
     }
     /**
@@ -404,6 +429,58 @@ class SocketHandlers {
         }
         socket.emit('gameState', emitState);
     }
+    /**
+     * Where a spectator belongs right now. They follow the game - reveals and the winner
+     * like everyone else, a waiting screen while the players work - but never a question,
+     * a lie prompt, or a ballot.
+     */
+    sendSpectatorToCurrentScreen(code, gameState, socket, name) {
+        const phase = gameState.getPhase();
+        const targetPlayer = gameState.getCurrentLieTargetPlayer();
+        const base = { sharedState: gameState.getSharedState(), name };
+        switch (phase) {
+            case GameState_1.GamePhase.ShowingLieResults:
+                socket.emit('gameState', {
+                    ...base,
+                    screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
+                    text: 'Results for ' + targetPlayer + '!',
+                    answers: this.buildResults(gameState, targetPlayer),
+                    targetPlayer
+                });
+                break;
+            case GameState_1.GamePhase.ShowingPoints:
+                socket.emit('gameState', {
+                    ...base,
+                    screen: IncludeStuff_1.Screens.h5ShowThePointsForTheRound,
+                    text: 'Points for this round!',
+                    leaderboard: gameState.getLeaderboard()
+                });
+                break;
+            case GameState_1.GamePhase.GameOver:
+                socket.emit('gameState', {
+                    ...base,
+                    screen: IncludeStuff_1.Screens.h6ShowTheWinner,
+                    text: 'Game Over!',
+                    leaderboard: gameState.getLeaderboard()
+                });
+                break;
+            default:
+                socket.emit('gameState', {
+                    ...base,
+                    screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+                    text: "You're watching this game. You'll see the results as they come in - you can join the board when the next game starts."
+                });
+        }
+    }
+    /** Register a mid-game arrival as a watcher and show them where the game is. */
+    addSpectator(code, gameState, socket, name) {
+        const socketInfo = this.socketStuff[code];
+        if (socketInfo && !socketInfo.spectatorSockets.includes(socket.id)) {
+            socketInfo.spectatorSockets.push(socket.id);
+        }
+        console.log('Spectator ' + name + ' watching game ' + code);
+        this.sendSpectatorToCurrentScreen(code, gameState, socket, name);
+    }
     // === PHASE TRANSITIONS ===
     //
     // One method per transition. Each was previously written out two or three times by
@@ -441,6 +518,10 @@ class SocketHandlers {
             text: hostText,
             timerValue: seconds
         });
+        this.sendToSpectators(code, {
+            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+            text: 'Players are answering their questions...'
+        });
         gameState.getUserNames().forEach(username => {
             const questionObj = gameState.assignQuestion(username);
             if (!questionObj)
@@ -472,6 +553,10 @@ class SocketHandlers {
             screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
             text: 'Now submitting lies for ' + targetPlayer + '!',
             timerValue: ROUND_SECONDS
+        });
+        this.sendToSpectators(code, {
+            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+            text: 'Players are writing lies about ' + targetPlayer + '...'
         });
         gameState.getUserNames().forEach(username => {
             if (username === targetPlayer) {
@@ -508,6 +593,10 @@ class SocketHandlers {
             text: 'Voting on lies for ' + targetPlayer + '!',
             timerValue: ROUND_SECONDS,
             answers
+        });
+        this.sendToSpectators(code, {
+            screen: IncludeStuff_1.Screens.c2WaitingScreenJustWhateverText,
+            text: 'Players are voting on ' + targetPlayer + "'s answers..."
         });
         gameState.getUserNames().forEach(username => {
             if (username === targetPlayer) {
@@ -549,6 +638,7 @@ class SocketHandlers {
             targetPlayer
         };
         this.sendToHost(code, state);
+        this.sendToSpectators(code, state);
         gameState.getUserNames().forEach(username => this.sendToUserSockets(code, username, 'gameState', state));
     }
     /**
@@ -711,6 +801,10 @@ class SocketHandlers {
             // IMPORTANT: Do NOT remove player from game state - only clean up socket connections
             for (const code in this.socketStuff) {
                 const socketInfo = this.socketStuff[code];
+                const spectatorIndex = socketInfo.spectatorSockets.indexOf(socket.id);
+                if (spectatorIndex > -1) {
+                    socketInfo.spectatorSockets.splice(spectatorIndex, 1);
+                }
                 // Check if this was a host socket and remove from the list
                 const hostIndex = socketInfo.hostSocketIds.indexOf(socket.id);
                 if (hostIndex > -1) {
@@ -742,7 +836,8 @@ class SocketHandlers {
             // Track host socket IDs (as list) and player sockets
             this.socketStuff[code] = {
                 hostSocketIds: [socket.id],
-                playerSockets: {}
+                playerSockets: {},
+                spectatorSockets: []
             };
             // Join the socket to the game room
             socket.join(code);
@@ -763,7 +858,7 @@ class SocketHandlers {
                 socket.join(code);
                 // Initialize socket tracking if not exists (for loaded games)
                 if (!this.socketStuff[code]) {
-                    this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
+                    this.socketStuff[code] = { hostSocketIds: [], playerSockets: {}, spectatorSockets: [] };
                 }
                 socket.emit('gameState', {
                     sharedState: gameState.getSharedState(),
@@ -810,7 +905,7 @@ class SocketHandlers {
             gameState.touch();
             // Initialize socket tracking if not exists
             if (!this.socketStuff[code]) {
-                this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
+                this.socketStuff[code] = { hostSocketIds: [], playerSockets: {}, spectatorSockets: [] };
             }
             // Rejoin the room - a new socket after a refresh is not in it yet.
             socket.join(code);
@@ -823,28 +918,38 @@ class SocketHandlers {
                 this.sendHostToCorrectScreen(code, gameState, socket);
             }
             else if (role === 'player' && name) {
-                if (!gameState.userExists(name)) {
-                    // Their name is gone (server restarted, or a fresh game reused the
-                    // code). Send them to pick a name rather than resyncing a player
-                    // the game has never heard of.
-                    console.log('identify for unknown player ' + name + ' in game ' + code);
-                    socket.emit('gameState', {
-                        screen: IncludeStuff_1.Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture,
-                        name: '',
-                        emoji: '',
-                        sharedState: gameState.getSharedState()
-                    });
+                // Same loose matching as nameAndEmoji, or reclaim-by-refresh breaks in
+                // exactly the cases reclaim-by-typing works (CNG-031).
+                const canonical = gameState.findUserName(name);
+                if (!canonical) {
+                    if (gameState.getPhase() === GameState_1.GamePhase.CollectingUsers) {
+                        // Game hasn't started - they can simply pick a name and play.
+                        console.log('identify for unknown player ' + name + ' in game ' + code);
+                        socket.emit('gameState', {
+                            screen: IncludeStuff_1.Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture,
+                            name: '',
+                            emoji: '',
+                            sharedState: gameState.getSharedState()
+                        });
+                    }
+                    else {
+                        // Mid-game and they match nobody (server restarted and dropped
+                        // the save, or they're new): they watch. Also what makes a
+                        // refreshing spectator resume watching instead of bouncing back
+                        // to the name screen.
+                        this.addSpectator(code, gameState, socket, name);
+                    }
                     return;
                 }
-                if (!this.socketStuff[code].playerSockets[name]) {
-                    this.socketStuff[code].playerSockets[name] = [];
+                if (!this.socketStuff[code].playerSockets[canonical]) {
+                    this.socketStuff[code].playerSockets[canonical] = [];
                 }
                 // Only add if not already present
-                if (!this.socketStuff[code].playerSockets[name].includes(socket.id)) {
-                    this.socketStuff[code].playerSockets[name].push(socket.id);
+                if (!this.socketStuff[code].playerSockets[canonical].includes(socket.id)) {
+                    this.socketStuff[code].playerSockets[canonical].push(socket.id);
                 }
-                console.log('>>> PLAYER ' + name + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
-                this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                console.log('>>> PLAYER ' + canonical + ' IDENTIFIED for game ' + code + ' (socket: ' + socket.id + ')');
+                this.sendPlayerToCorrectScreen(code, gameState, canonical, socket);
             }
         });
         socket.on('nameAndEmoji', ({ name, emoji, code }) => {
@@ -853,39 +958,55 @@ class SocketHandlers {
             if (gameState) {
                 // Initialize socket tracking if not exists (for loaded games)
                 if (!this.socketStuff[code]) {
-                    this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
+                    this.socketStuff[code] = { hostSocketIds: [], playerSockets: {}, spectatorSockets: [] };
                 }
                 gameState.touch();
-                // If user already exists, KEEP their state and just add new socket connection
-                // This preserves their game state (points, answers, lies, etc.) on reconnection
-                if (gameState.userExists(name)) {
-                    // User already exists - preserve their state, just add new socket connection
-                    // Don't remove them or destroy their game state
-                }
-                else {
-                    // New user - add them to the game
-                    gameState.addUser(name, emoji);
-                }
                 socket.join(code);
-                // Track player socket - ADD to array, don't replace
-                if (this.socketStuff[code]) {
-                    if (!this.socketStuff[code].playerSockets[name]) {
-                        this.socketStuff[code].playerSockets[name] = [];
-                    }
-                    // Only add if not already present
-                    if (!this.socketStuff[code].playerSockets[name].includes(socket.id)) {
-                        this.socketStuff[code].playerSockets[name].push(socket.id);
-                    }
+                const trimmed = validateName(name);
+                if (!trimmed) {
+                    socket.emit('gameState', {
+                        screen: IncludeStuff_1.Screens.c1TypeInYourNameAndPickAnEmojiForYourPicture,
+                        error: 'Please pick a usable name',
+                        name: '',
+                        emoji: '',
+                        sharedState: gameState.getSharedState()
+                    });
+                    return;
                 }
-                console.log('User ' + name + ' joined game ' + code + ' (phase: ' + gameState.getPhase() + ')');
+                // Match loosely, keep the stored spelling: "Bob" retyping " bob " on a
+                // new device is the supported reconnect path, and exact matching forked
+                // a ghost player into the live game (CNG-031).
+                const existing = gameState.findUserName(trimmed);
+                if (!existing && gameState.getPhase() !== GameState_1.GamePhase.CollectingUsers) {
+                    // Once a game starts, a name that matches nobody doesn't join the
+                    // board - they watch (user ruling, 2026-07-16). They can play when
+                    // the next game starts.
+                    this.addSpectator(code, gameState, socket, trimmed);
+                    return;
+                }
+                // The name everyone else already sees, or the new player's as typed.
+                const canonical = existing !== null && existing !== void 0 ? existing : trimmed;
+                if (!existing) {
+                    gameState.addUser(canonical, emoji);
+                }
+                // Track player socket - ADD to array, don't replace
+                if (!this.socketStuff[code].playerSockets[canonical]) {
+                    this.socketStuff[code].playerSockets[canonical] = [];
+                }
+                if (!this.socketStuff[code].playerSockets[canonical].includes(socket.id)) {
+                    this.socketStuff[code].playerSockets[canonical].push(socket.id);
+                }
+                console.log('User ' + canonical + ' joined game ' + code + ' (phase: ' + gameState.getPhase() + ')');
                 // Notify host of new user
                 this.sendToHost(code, {
                     sharedState: gameState.getSharedState(),
                     name: '<host>',
                     screen: this.getHostScreen(gameState)
                 });
-                // Use the single source of truth function to send player to correct screen
-                this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                // Use the single source of truth function to send player to correct
+                // screen. It carries name: canonical, which is how a sloppy retype
+                // learns the spelling the game knows them by.
+                this.sendPlayerToCorrectScreen(code, gameState, canonical, socket);
             }
             else {
                 socket.emit('gameState', {

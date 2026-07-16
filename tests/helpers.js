@@ -43,6 +43,7 @@ async function connect(url) {
         if (st.screen !== undefined) { c.last = st.screen; c.screens.push(st.screen); }
         if (st.sharedState?.code) c.code = st.sharedState.code;
         if (st.sharedState?.users) c.users = st.sharedState.users;
+        if (st.name !== undefined && st.name !== '') c.name = st.name;
         if (st.question !== undefined) c.question = st.question;
         if (st.targetPlayer !== undefined) c.targetPlayer = st.targetPlayer;
         if (st.phaseToken !== undefined) c.phaseToken = st.phaseToken;

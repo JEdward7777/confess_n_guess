@@ -38,17 +38,17 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-028](#cng-028) | High | **Fixed** | The reveal and points screens have no server clock, so an absent host still freezes the game |
 | [CNG-029](#cng-029) | High | **Fixed** | A host on localhost produces a QR code nobody can scan |
 | [CNG-030](#cng-030) | Medium | **Fixed** | A fresh clone serves nothing — the client build is gitignored but the server serves it |
-| [CNG-031](#cng-031) | High | Open | Name reclaim is case- and whitespace-sensitive — retyping "bob" for "Bob" forks a ghost player mid-game |
-| [CNG-032](#cng-032) | High | Open | Question pool exhaustion: players silently get no question, and the empty round restarts forever |
-| [CNG-033](#cng-033) | Medium | Open | Server-driven transitions count as "activity", so an abandoned churning game never idles out |
-| [CNG-034](#cng-034) | Medium | Open | Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame` |
+| [CNG-031](#cng-031) | High | **Fixed** | Name reclaim is case- and whitespace-sensitive — retyping "bob" for "Bob" forks a ghost player mid-game |
+| [CNG-032](#cng-032) | High | **Fixed** | Question pool exhaustion: players silently get no question, and the empty round restarts forever |
+| [CNG-033](#cng-033) | Medium | **Fixed** | Server-driven transitions count as "activity", so an abandoned churning game never idles out |
+| [CNG-034](#cng-034) | Medium | **Fixed** | Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame` |
 | [CNG-035](#cng-035) | Medium | Open | The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift |
 | [CNG-036](#cng-036) | Medium | Open | Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save |
-| [CNG-037](#cng-037) | Low | Open | Mid-round joiners are added to the current round's quorum, stalling it until the timer |
+| [CNG-037](#cng-037) | Low | **Fixed** | Mid-round joiners are added to the current round's quorum, stalling it until the timer |
 | [CNG-038](#cng-038) | Low | Open | `socketStuff` and in-memory games are never pruned while the server runs |
-| [CNG-039](#cng-039) | Low | Open | Server accepts any name: empty, `<host>`, unbounded length |
+| [CNG-039](#cng-039) | Low | **Fixed** | Server accepts any name: empty, `<host>`, unbounded length |
 | [CNG-040](#cng-040) | Low | Open | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
-| [CNG-041](#cng-041) | Low | Open | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
+| [CNG-041](#cng-041) | Low | Partly fixed | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -1024,7 +1024,13 @@ correct meet badly.
 
 ### CNG-031
 **Name reclaim is case- and whitespace-sensitive — retyping "bob" for "Bob" forks a ghost player mid-game**
-High · Open · `src/socketHandlers.ts:926-944, 53-56`, `src/GameState.ts:154-156`
+High · **Fixed 2026-07-16** ·
+
+> Fixed: `findUserName` matches trimmed and case-folded while keeping the stored spelling;
+> both `nameAndEmoji` and `identify` use it, so reclaim-by-typing and reclaim-by-refresh
+> agree. Red-first: the pre-fix run showed the ghost (`[<host>,Alice,Bob,Carol, ALICE ]`)
+> and all three real players stalled waiting on phantoms. `tests/reclaim-and-spectators`.
+> `src/socketHandlers.ts:926-944, 53-56`, `src/GameState.ts:154-156`
 
 Game codes are normalized on every handler (`normalizeCode`, `:53`). Names never are:
 `userExists` is a raw `name in users` (`GameState.ts:154`), and `nameAndEmoji` trusts it
@@ -1055,7 +1061,14 @@ points, no ghost in the lobby.
 
 ### CNG-032
 **Question pool exhaustion: players silently get no question, and the empty round restarts forever**
-High · Open · `src/socketHandlers.ts:484-494, 638-641`, `src/GameState.ts:203-232, 496-500`
+High · **Fixed 2026-07-16** ·
+
+> Fixed: `getNextQuestion` recycles the pool when it runs dry — repeats beat silence.
+> Red-first with `CNG_QUESTION_COUNT=4`: pre-fix, "only [alice] got one; bob emits:[]
+> carol emits:[]". The pre-fix run also revealed the round "recovering" by accident:
+> the skipped players answered against stale questions via `addAnswer`'s client-echo
+> fallback. `tests/question-pool`.
+> `src/socketHandlers.ts:484-494, 638-641`, `src/GameState.ts:203-232, 496-500`
 
 The pool is 30 questions. `usedQuestionIndexes` is only ever reset by `resetForNewGame`
 (`startGame`). `restartRound` does **not** recycle it, and every restart draws a fresh
@@ -1086,7 +1099,16 @@ every player still receives a question.
 
 ### CNG-033
 **Server-driven transitions count as "activity", so an abandoned churning game never idles out**
-Medium · Open · `src/GameState.ts:270-274`, `src/index.ts:22-28`
+Medium · **Fixed 2026-07-16** ·
+
+> Fixed: `touch()` removed from `setPhase` and placed in the human-driven handlers (joins,
+> identify, submissions, startGame, the host's Continues). `timerExpired` deliberately
+> does not touch. Red-first with a 4s idle window: pre-fix, "still saved with phase
+> answeringQuestions; churn counted as activity"; green after, with a control asserting a
+> humanly-active game still survives. Residue: the zombie churns in memory until the next
+> save prunes it, since sweeps only run at load/save — that's CNG-036/038 territory.
+> `tests/idle-sweep`.
+> `src/GameState.ts:270-274`, `src/index.ts:22-28`
 
 `setPhase` calls `touch()` (`GameState.ts:271`) — which is right for player- and
 host-driven transitions, but the server's own timers also go through `setPhase`. So the
@@ -1111,7 +1133,14 @@ forever.
 
 ### CNG-034
 **Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame`**
-Medium · Open · `src/socketHandlers.ts:1175-1210, 1212-1223, 1247-1270`
+Medium · **Fixed 2026-07-16** ·
+
+> Verified at three layers before acting (user's instruction): client source — nothing;
+> the built, served bundle — zero occurrences; git history — they *were* once emitted
+> (`998a962`, `19393c0`) and later dropped, so genuine legacy. `selectBestAnswer` and
+> `nextRound` deleted; `endGame` kept for the host-exclusion test, now phase-guarded and
+> stopping the round timer. H4 screen removed with them.
+> `src/socketHandlers.ts:1175-1210, 1212-1223, 1247-1270`
 
 Nothing in the client emits any of these (verified by grep across
 `confess_n_guess_client/src`). All three still mutate state, and two have no meaningful
@@ -1163,7 +1192,12 @@ having every send — transition and resync alike — reuse it.
 
 ### CNG-036
 **Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save**
-Medium · Open · `src/index.ts:44-52`
+Medium · Open — **decision with the user** ·
+
+> Asked 2026-07-16; recommendation given (a SIGTERM handler mirroring SIGINT — three
+> lines, no new behavior — with the periodic save as optional extra). The user may choose
+> to leave it; record the outcome here either way so it isn't re-litigated.
+> `src/index.ts:44-52`
 
 `saveGameState` runs on `process.on('exit')` and `SIGINT`. Node does **not** fire `exit`
 listeners for signals with default handlers, so plain `kill <pid>` (SIGTERM — also what
@@ -1183,7 +1217,15 @@ SIGTERM.
 
 ### CNG-037
 **Mid-round joiners are added to the current round's quorum, stalling it until the timer**
-Low · Open · `src/socketHandlers.ts:938-944`, `src/GameState.ts:308-311, 365-371, 400-406`
+Low · **Fixed 2026-07-16 (by ruling)** ·
+
+> The user answered T20: *"Once a game starts, new joiners shouldn't show up on the
+> leaderboard unless their name matches… ok for a third party to join and just watch, but
+> they shouldn't join the board."* Implemented as spectators: mid-game arrivals whose name
+> matches nobody are tracked per-socket (never in `users`), follow the reveals, points and
+> winner, and can play when the next game starts. Quorums and the leaderboard are
+> untouched by them, which closes this issue outright. `tests/reclaim-and-spectators`.
+> `src/socketHandlers.ts:938-944`, `src/GameState.ts:308-311, 365-371, 400-406`
 
 `nameAndEmoji` calls `addUser` in any phase, and every all-submitted predicate is computed
 over the *current* user list. So a newcomer joining during `AnsweringQuestions` makes
@@ -1215,7 +1257,12 @@ delete `socketStuff[code]` alongside the game.
 
 ### CNG-039
 **Server accepts any name: empty, `<host>`, unbounded length**
-Low · Open · `src/socketHandlers.ts:926-944`
+Low · **Fixed 2026-07-16** ·
+
+> Folded into the CNG-031 change: `validateName` trims, rejects empty and `<host>`
+> (case-insensitively), caps at 40 chars; a rejected name is sent back to the name screen
+> with an error.
+> `src/socketHandlers.ts:926-944`
 
 All name validation lives in the client (`C1…Page.tsx:22-30`): trim, non-empty, not
 `<host>`. The server checks nothing. `nameAndEmoji` with `name: ''` or `name: '<host>'`
@@ -1246,7 +1293,11 @@ restart mid-vote reorders every ballot). One stored order, every send reuses it.
 
 ### CNG-041
 **Client nits, collected**
-Low · Open · various
+Low · Partly fixed 2026-07-16 · various
+
+> H4 (component, enum member, App branch) removed with CNG-034. Still open: H1 never
+> renders `gameState.text`, and the merge-trap design note.
+>
 
 Small things spotted on the read that don't merit their own entries:
 

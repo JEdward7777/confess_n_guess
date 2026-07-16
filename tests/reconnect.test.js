@@ -60,7 +60,11 @@ module.exports = {
 
         // --- unknown game / unknown player
         t.screenIs('identify against a dead code -> start over', (await refresh(url, 'ZZZZZ', 'alice')).last, S.g1NewGame);
-        t.screenIs('identify as a name the game never had -> pick a name', (await refresh(url, code, 'nobody')).last, S.c1Name);
+        // Mid-game, a name the game never had becomes a SPECTATOR (user ruling
+        // 2026-07-16, CNG-031/037): they watch rather than being bounced to the name
+        // screen, and they never join the board. The pick-a-name path only applies
+        // before the game starts.
+        t.screenIs('identify as an unknown name mid-game -> watches', (await refresh(url, code, 'nobody')).last, S.c2Waiting);
 
         [host, ...Object.values(P)].forEach(c => c.close());
         return t.ok;

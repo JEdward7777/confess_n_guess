@@ -200,6 +200,26 @@ export class GameState {
         return name in this.sharedState.users;
     }
 
+    /**
+     * The stored name matching `name` case-insensitively and trimmed, or null.
+     *
+     * Reclaim-by-name is the supported reconnect path (see the identity decision), and it
+     * has to survive a shift key: game codes are normalized everywhere, but names used to
+     * be exact-matched, so "Bob" retyping "bob" on the tablet forked a ghost player into a
+     * live game (CNG-031). Matching is loose; the stored spelling - what the player first
+     * typed - is what everyone keeps seeing.
+     */
+    findUserName(name: string): string | null {
+        const canonical = (name ?? '').trim().toLowerCase();
+        if (!canonical) return null;
+        for (const existing of Object.keys(this.sharedState.users)) {
+            if (existing !== '<host>' && existing.trim().toLowerCase() === canonical) {
+                return existing;
+            }
+        }
+        return null;
+    }
+
     // Points
     addPoints(userName: string, points: number): void {
         if (this.sharedState.users[userName]) {
