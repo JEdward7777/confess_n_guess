@@ -31,8 +31,6 @@ small and genuinely optional.
 
 ## Backlog
 
-- **T9** — Remove or gate `killServer` (**CNG-015**). Any client can kill the process.
-- **T11** — Fix H5 auto-continue re-arming (**CNG-017**).
 
 ## Absorbed from todo.txt
 

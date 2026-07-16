@@ -1251,12 +1251,5 @@ export class SocketHandlers {
             console.log('Host reported timer expiry for game ' + code);
             this.handleTimerExpiry(code);
         });
-
-        socket.on('killServer', () => {
-            console.log('Kill server requested');
-            // Save all game states
-            // Then exit
-            process.exit(0);
-        });
     }
 }

@@ -483,3 +483,27 @@ Two sessions running, a green test has led me to a conclusion broader than it ea
 warning is now in the README next to the "watch it fail first" rule.
 
 9/9 green.
+
+---
+
+## 2026-07-15 — Remove killServer (CNG-015)
+
+Removed. Any connected client could emit `killServer` and take the process down.
+
+Worth recording *why* this didn't fall under the CNG-008 decision, since it looks like it
+should: also devtools-only, also a friend in the room. The difference is that identity risk
+was accepted because **fixing it cost something real** — reconnecting and switching
+devices. `killServer` bought nothing: no screen emitted it, no code path used it, no test
+touched it. With nothing on the other side of the scale there was no trade to make, and
+"accept the risk" isn't a principle, it's the answer to a comparison.
+
+It also looks obsolete rather than merely unused. `todo.txt` had two adjacent lines —
+*"create a function that I can send to the server to kill it"* and *"Fix the control c
+thing which is bypassing the state of the game being saved"*. The kill switch reads as a
+workaround for Ctrl+C losing state, and SIGINT now saves properly (that's what
+`restart-survival` exercises). Ctrl+C does the job it stood in for.
+
+If a remote kill is ever wanted back for dev convenience, gate it behind an env var rather
+than leaving it open to every client.
+
+Backlog is now empty.

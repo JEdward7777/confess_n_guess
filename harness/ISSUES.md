@@ -23,7 +23,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-012](#cng-012) | High | **Fixed** | `addLie`/`addVote` don't dedupe — duplicate entries and double points |
 | [CNG-013](#cng-013) | Medium | **Fixed** | `nextRound` broadcasts every question to every player |
 | [CNG-014](#cng-014) | Medium | **Fixed** | Skip path omits `targetPlayer`, client submits against a stale target |
-| [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
+| [CNG-015](#cng-015) | Medium | **Fixed** | `killServer` is unauthenticated |
 | [CNG-016](#cng-016) | Medium | **Fixed** | Games are never expired — 37 stale games on disk |
 | [CNG-017](#cng-017) | Medium | **Fixed** | H5 auto-continue re-arms forever |
 | [CNG-018](#cng-018) | Medium | **Fixed** | `identifyMe` can arrive before the client's listener is attached |
@@ -537,7 +537,24 @@ whether `gameState` payloads should be authoritative-complete.
 
 ### CNG-015
 **`killServer` is unauthenticated**
-Medium · Open · `src/socketHandlers.ts:1659-1664`
+Medium · **Fixed 2026-07-15** · `src/socketHandlers.ts:1659-1664`
+
+> Removed.
+>
+> At first glance this falls under the CNG-008 decision: reachable only via devtools, by a
+> friend in the room. But that reasoning doesn't transfer, and the reason is the useful
+> part. Identity risk was accepted because *fixing it cost something real* — reconnecting
+> and switching devices. `killServer` bought nothing: no screen emitted it, no code path
+> used it. Nothing sat on the other side of the scale, so there was no trade to make.
+>
+> It was almost certainly already obsolete. `todo.txt` had two adjacent lines — *"create a
+> function that I can send to the server to kill it"* and *"Fix the control c thing which
+> is bypassing the state of the game being saved"*. The kill switch reads as a workaround
+> for Ctrl+C losing state, and the SIGINT handler (`index.ts:32`) now saves properly —
+> that's what `restart-survival` exercises. Ctrl+C does the job it was standing in for.
+>
+> If a remote kill is ever wanted back for dev convenience, gate it behind an env var
+> rather than leaving it open to every connected client.
 
 Any connected client can emit `killServer` and take the process down for everyone.
 It came from a `todo.txt` line ("create a function that I can send to the server to
