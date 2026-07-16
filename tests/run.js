@@ -14,6 +14,7 @@ const TESTS = [
     'question-stability.test.js',
     'reconnect.test.js',
     'timer.test.js',
+    'multi-device.test.js',
     'fullgame.test.js',
     'restart-survival.test.js'
 ];

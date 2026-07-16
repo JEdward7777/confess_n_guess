@@ -353,3 +353,55 @@ green suite nobody has watched fail is not evidence. That rule is now in the REA
 
 **Next: T7 (server-side identity)** — the last structural root cause, and now the only
 task left that a test suite would want to stand behind.
+
+---
+
+## 2026-07-15 — T7 revised: identity is claimed, not proved (CNG-012, -020, -026)
+
+**The user rejected the token plan, and was right.** T7 was going to mint a per-player
+secret required to reclaim a name. That is the only way to prove identity without
+passwords, and it buys the proof by making a lost token equal a lost seat — a dead
+battery, a cleared browser, or picking up the tablet instead of the phone would end your
+game mid-round. Meanwhile impersonating someone needs devtools and hand-crafted socket
+messages, from a friend sitting in the same room.
+
+`todo.txt` had already settled this: *"Actually make it so that you replace that user so
+that it is possible to get back into the game if you fall out."* Name-only reclaim is the
+feature. My plan would have quietly reversed a decision the user had already made — the
+kind of thing a security framing makes feel obligatory rather than optional.
+
+CNG-008, CNG-009 and CNG-019 are now **Won't fix (accepted)**, with the reasoning written
+into ISSUES so the next person to read "anyone can vote as anyone" doesn't reach for the
+same fix. If the room ever isn't trusted, the answer is host-mediated approval of a
+reclaim — a human who can see the room — not a secret the player can lose.
+
+**What the security framing was hiding.** T7 bundled identity-proof together with three
+plain correctness bugs, and they'd have ridden along on a decision that turned out to be
+wrong. They have nothing to do with proving who anyone is, and are made *more* likely by
+the multi-device support the decision protects:
+
+- **CNG-026** (new) — the three post-submit confirmations used `socket.emit`, reaching
+  only the socket that submitted, while every other player-bound send goes through
+  `sendToUserSockets`. So a player's second tab kept showing a live ballot.
+- **CNG-012** — `addLie`/`addVote` pushed unconditionally, so that second tab's vote
+  counted as well as the first.
+- **CNG-020** — re-rated Low → High. Filed as "a crafted client could cheat"; with
+  CNG-026 an honest second tab reaches the same place.
+
+Measured with all three reverted: `voters on the truth: [bob, bob, carol]`, leaderboard
+`alice=3000 bob=2500 carol=1000` instead of `alice=2000`. One player, one extra tab.
+
+**New test `multi-device` — and I nearly shipped it vacuous.** First version passed with
+the bugs reverted: the double-vote branch was guarded by `if (liars.includes('alice'))`
+and the first target is deterministically the first player, so alice was never a voter and
+the branch never ran. Exactly the failure mode written into the README one commit earlier,
+caught only because the rule says to watch it fail. It now pins the two-device player to a
+voter and **asserts that premise**, so if targeting ever changes the test fails loudly
+instead of quietly proving nothing.
+
+A second flaw fell out of the same check: I was asserting the sibling-tab behaviour after
+the *last* voter voted, when everyone correctly moves to the reveal — checking at the one
+moment the thing is unobservable.
+
+7/7 green. Nothing queued; the T3 remainder (server-owned countdown) is the only
+substantial item left, and is robustness rather than correctness.

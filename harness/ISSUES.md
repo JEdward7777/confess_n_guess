@@ -16,23 +16,24 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-005](#cng-005) | Critical | **Fixed** | Reconnect never resyncs — refreshing leaves you on a stale screen |
 | [CNG-006](#cng-006) | High | **Fixed** | Resync re-rolls the player's question; assignment never stored server-side |
 | [CNG-007](#cng-007) | High | **Fixed** | Host refresh lands on the player name-entry screen |
-| [CNG-008](#cng-008) | High | Open | Duplicate name silently merges two devices into one player |
-| [CNG-009](#cng-009) | High | Open | Server trusts the client-supplied `name` on every event |
+| [CNG-008](#cng-008) | High | **Won't fix** | Duplicate name silently merges two devices into one player |
+| [CNG-009](#cng-009) | High | **Won't fix** | Server trusts the client-supplied `name` on every event |
 | [CNG-010](#cng-010) | High | **Fixed** | `startGame` doesn't clear answers or the question pool |
 | [CNG-011](#cng-011) | High | **Fixed** | Blind `setTimeout` chain advances the game behind the host's back |
-| [CNG-012](#cng-012) | High | Open | `addLie`/`addVote` don't dedupe — duplicate entries and double points |
+| [CNG-012](#cng-012) | High | **Fixed** | `addLie`/`addVote` don't dedupe — duplicate entries and double points |
 | [CNG-013](#cng-013) | Medium | **Fixed** | `nextRound` broadcasts every question to every player |
 | [CNG-014](#cng-014) | Medium | **Fixed** | Skip path omits `targetPlayer`, client submits against a stale target |
 | [CNG-015](#cng-015) | Medium | Open | `killServer` is unauthenticated |
 | [CNG-016](#cng-016) | Medium | **Fixed** | Games are never expired — 37 stale games on disk |
 | [CNG-017](#cng-017) | Medium | Open | H5 auto-continue re-arms forever |
 | [CNG-018](#cng-018) | Medium | **Fixed** | `identifyMe` can arrive before the client's listener is attached |
-| [CNG-019](#cng-019) | Medium | Open | Any client can claim to be the host of any game |
-| [CNG-020](#cng-020) | Low | Open | Self-vote only prevented client-side |
+| [CNG-019](#cng-019) | Medium | **Won't fix** | Any client can claim to be the host of any game |
+| [CNG-020](#cng-020) | **High** | **Fixed** | Self-vote only prevented client-side |
 | [CNG-021](#cng-021) | High | **Fixed** | No automated test can reach any of this |
 | [CNG-022](#cng-022) | Low | Partly fixed | Dead code: server-side timer, `sendToUserSockets` |
 | [CNG-023](#cng-023) | **High** | **Fixed** | ~700 lines of duplicated phase-transition logic |
 | [CNG-025](#cng-025) | High | **Fixed** | A restarted round isn't fresh — keeps the old target pointer, lies and votes |
+| [CNG-026](#cng-026) | High | **Fixed** | Post-submit confirmations only reach the submitting socket, so sibling tabs stay live |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -57,6 +58,43 @@ The previous agent's work (commits `bac7c5b`, `017fde5`, `98fd9a2`) changed sock
 from single values to lists. That correctly stopped players from booting each other,
 but it did not address any of the above — and it *enabled* CNG-003, because two live
 host sockets now means two independent countdowns both firing `timerExpired`.
+
+---
+
+## Decision: identity is claimed, not proved (2026-07-15)
+
+**CNG-008, CNG-009 and CNG-019 are accepted risks, not bugs to fix.** Decided by the
+user; recorded here so it doesn't get re-litigated by the next person who reads
+"anyone can vote as anyone" and reaches for a fix.
+
+The original plan was a per-player token minted at first join and required to reclaim a
+name. That is the only way to prove identity without passwords — and it buys the proof
+by making a lost token equal a lost seat.
+
+That is the wrong trade for this game:
+
+- **The threat needs devtools.** No screen offers a way to submit as another player;
+  you would have to craft socket messages by hand. The people who could are friends
+  sitting in the same room, who could equally just look at your phone.
+- **The lockout needs nothing.** A flat battery, a cleared browser, a private window, or
+  simply picking up the tablet instead of the phone. Any of those would end your game,
+  permanently, mid-round.
+- **It was already decided.** `todo.txt`: *"Actually make it so that you replace that
+  user so that it is possible to get back into the game if you fall out."* Name-only
+  reclaim is the feature. A token would have quietly reversed it.
+
+So: someone playing unfairly is a risk worth carrying; someone getting locked out is not.
+
+**What this does not excuse.** The T7 task bundled identity-proof together with several
+plain correctness bugs, and the security framing carried them along. Duplicate
+submissions (CNG-012), self-votes (CNG-020) and stale sibling tabs (CNG-026) have nothing
+to do with proving who anyone is — they are ways an *honest* player gets the wrong result,
+and several are made **more** likely by the multi-device support this decision protects.
+Those are fixed.
+
+If the game is ever played somewhere the room isn't trusted, revisit this — but the fix
+is then host-mediated approval of a reclaim (the host is a human who can see the room),
+not a secret the player can lose.
 
 ---
 
@@ -342,7 +380,9 @@ The check ignores `joinName === '<host>'`, which is right there in the next line
 
 ### CNG-008
 **Duplicate name silently merges two devices into one player**
-High · Open · `src/socketHandlers.ts:524-556`
+High · **Won't fix (accepted) 2026-07-15** · `src/socketHandlers.ts:524-556`
+
+> **This is the intended behaviour, not a bug.** See the decision note below.
 
 ```ts
 if (gameState.userExists(name)) {
@@ -368,7 +408,9 @@ secret issued on first join and presented on reclaim — see TASKS.md.
 
 ### CNG-009
 **Server trusts the client-supplied `name` on every event**
-High · Open · `src/socketHandlers.ts:653, 742, 841`
+High · **Won't fix (accepted) 2026-07-15** · `src/socketHandlers.ts:653, 742, 841`
+
+> Accepted risk. See the decision note below.
 
 `sendQuestionAnswer`, `submitLie`, and `voteOnLie` all take `name` from the payload
 and act on it without checking it against the socket. Any client can submit an
@@ -428,7 +470,12 @@ no-op if the game has moved on.
 
 ### CNG-012
 **`addLie`/`addVote` don't dedupe — duplicate entries and double points**
-High · Open · `src/GameState.ts:264-269, 286-291`
+High · **Fixed 2026-07-15** · `src/GameState.ts:264-269, 286-291`
+
+> Fixed: both upsert by username. A resubmission replaces the previous entry rather than
+> adding a second. Nothing to do with identity — this is how an *honest* player with two
+> tabs gets double points, and it's made more likely by the multi-device support the
+> CNG-008 decision protects.
 
 Both push unconditionally. A player who submits twice (two tabs — now supported —
 or a resend after a resync) appears twice in the answer list, and in the case of
@@ -556,7 +603,10 @@ asked removes the race entirely.
 
 ### CNG-019
 **Any client can claim to be the host of any game**
-Medium · Open · `src/socketHandlers.ts:499-522`
+Medium · **Won't fix (accepted) 2026-07-15** · `src/socketHandlers.ts:499-522`
+
+> Accepted risk. A host token would lock out a host whose tab died — the worst possible
+> role to lock out, since the countdown lives in their browser. See the decision note.
 
 `identify` accepts `role: 'host'` for any code, from anyone, and pushes the socket
 into `hostSocketIds`. That socket then receives host screens (seeing every answer
@@ -569,7 +619,11 @@ happily create tracking for a nonexistent code. Needs a host token minted at
 
 ### CNG-020
 **Self-vote only prevented client-side**
-Low · Open · `confess_n_guess_client/src/C4PickBestAnswer.tsx:31`
+High · **Fixed 2026-07-15** · `confess_n_guess_client/src/C4PickBestAnswer.tsx:31`
+
+> Re-rated Low → High: filed as "a crafted client could cheat", but with CNG-026 a
+> perfectly honest second tab reaches the same place. Fixed server-side in `voteOnLie` —
+> a vote for your own answer is rejected and the player resynced.
 
 The voting list filters out the player's own lie in the browser. The server accepts
 any `selectedUsername`, and `calculateLiePoints` pays out for it. A stale or crafted
@@ -723,3 +777,40 @@ gameState.setTimerValue(30);
 
 Found by the CNG-003 verification: after a restart the round targeted `bob` instead of
 starting over at `alice`. Fixed by calling `resetLieData()` in both paths.
+
+---
+
+### CNG-026
+**Post-submit confirmations only reach the submitting socket, so sibling tabs stay live**
+High · **Fixed 2026-07-15** · `src/socketHandlers.ts:879, 925, 970`
+
+> Fixed: all three confirmations now go through `sendToUserSockets`, reaching every one of
+> that player's devices like every other player-bound send already did.
+>
+> Measured with CNG-012/-020/-026 all reverted: the reveal listed
+> `voters on the truth: [bob, bob, carol]` and the leaderboard read
+> `alice=3000 bob=2500 carol=1000` instead of `alice=2000` — bob counted twice, plus 500
+> from his own self-vote. One player, one extra tab.
+
+The three "thanks, now wait" confirmations are sent with `socket.emit`, which reaches
+only the socket that submitted:
+
+```ts
+} else {
+    socket.emit('gameState', {
+        screen: Screens.c2WaitingScreenJustWhateverText,
+        text: 'Vote submitted! Waiting for others to vote...'
+    });
+}
+```
+
+Every other player-bound send goes through `sendToUserSockets` and reaches all of a
+player's devices. These three don't. So a player with two tabs (explicitly supported
+since commit `bac7c5b`) votes in one, and **the other tab still shows a live ballot**.
+Voting again pushes a second vote, which `calculateLiePoints` counts — 1000 or 500 points
+for one opinion, plus their name appearing twice in the reveal.
+
+Directly caused by the multi-device support that the CNG-008 decision above exists to
+protect: the more devices a player is allowed, the more likely this is. Nothing to do
+with identity — an honest player gets the wrong result. Pairs with CNG-012, which is what
+makes the second submission count rather than being ignored.

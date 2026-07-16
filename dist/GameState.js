@@ -243,13 +243,26 @@ class GameState {
     getTruthForPlayer(username) {
         return this.userAnswers[username] || null;
     }
-    // Add a lie for the target player
+    /**
+     * Add a lie for the target player. One lie per person: a resubmission replaces the
+     * previous one rather than adding a second.
+     *
+     * This used to push unconditionally, so a player submitting twice - two tabs, or a
+     * resend after a resync, both of which are normal now that multiple devices are
+     * supported - appeared twice in the answer list with two lies (CNG-012).
+     */
     addLie(targetUsername, lieUsername, lie) {
         this.touch();
         if (!this.lies[targetUsername]) {
             this.lies[targetUsername] = [];
         }
-        this.lies[targetUsername].push({ username: lieUsername, lie });
+        const existing = this.lies[targetUsername].find(l => l.username === lieUsername);
+        if (existing) {
+            existing.lie = lie;
+        }
+        else {
+            this.lies[targetUsername].push({ username: lieUsername, lie });
+        }
     }
     // Get all lies for a target player
     getLiesForPlayer(targetUsername) {
@@ -264,13 +277,26 @@ class GameState {
         const submittedLiers = ((_a = this.lies[targetUsername]) === null || _a === void 0 ? void 0 : _a.map(l => l.username)) || [];
         return otherPlayers.every(name => submittedLiers.includes(name));
     }
-    // Add a vote
+    /**
+     * Record a vote. One vote per person: changing your mind replaces the old vote rather
+     * than casting a second.
+     *
+     * This used to push unconditionally, so a player voting twice - which a second open
+     * tab makes easy, since it keeps showing a live ballot (CNG-026) - had BOTH counted
+     * by calculateLiePoints, paying out 1000 or 500 twice for one opinion (CNG-012).
+     */
     addVote(targetUsername, voter, selectedUsername) {
         this.touch();
         if (!this.votes[targetUsername]) {
             this.votes[targetUsername] = [];
         }
-        this.votes[targetUsername].push({ voter, selectedUsername });
+        const existing = this.votes[targetUsername].find(v => v.voter === voter);
+        if (existing) {
+            existing.selectedUsername = selectedUsername;
+        }
+        else {
+            this.votes[targetUsername].push({ voter, selectedUsername });
+        }
     }
     // Get all votes for a target
     getVotesForPlayer(targetUsername) {

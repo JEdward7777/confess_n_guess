@@ -875,8 +875,10 @@ export class SocketHandlers {
                     console.log('ALL PLAYERS HAVE ANSWERED! Transitioning to lie phase.');
                     this.advanceToNextLieRoundOrEnd(code, gameState);
                 } else {
-                    // Send thank you / waiting screen to player
-                    socket.emit('gameState', {
+                    // All of this player's devices, not just the one that submitted -
+                    // otherwise their other tab sits there still showing the question
+                    // (CNG-026).
+                    this.sendToUserSockets(code, name, 'gameState', {
                         screen: Screens.c2WaitingScreenJustWhateverText,
                         text: 'Thank you for your answer! Please wait for others to finish...'
                     });
@@ -921,8 +923,8 @@ export class SocketHandlers {
                     console.log('All lies submitted, proceeding to voting...');
                     this.beginVoting(code, gameState, targetPlayer);
                 } else {
-                    // Send waiting to player
-                    socket.emit('gameState', {
+                    // All of this player's devices - see CNG-026.
+                    this.sendToUserSockets(code, name, 'gameState', {
                         screen: Screens.c2WaitingScreenJustWhateverText,
                         text: 'Lie submitted! Waiting for others to submit their lies...'
                     });
@@ -956,6 +958,15 @@ export class SocketHandlers {
                     return;
                 }
                 
+                // The ballot hides your own answer, so no honest client can send this -
+                // but the server never checked, and calculateLiePoints would happily pay
+                // out 500 a head for it (CNG-020).
+                if (selectedUsername === name) {
+                    console.log('ERROR: ' + name + ' voted for their own answer. Resyncing player.');
+                    this.sendPlayerToCorrectScreen(code, gameState, name, socket);
+                    return;
+                }
+
                 console.log('User ' + name + ' voted for ' + selectedUsername + ' (target: ' + targetPlayer + ')');
                 
                 // Store the vote
@@ -966,8 +977,9 @@ export class SocketHandlers {
                     // Stops at the reveal - the host drives what happens next.
                     this.showLieResults(code, gameState, targetPlayer);
                 } else {
-                    // Send waiting to player
-                    socket.emit('gameState', {
+                    // All of this player's devices. A sibling tab left showing a live
+                    // ballot is how one player casts two votes (CNG-026).
+                    this.sendToUserSockets(code, name, 'gameState', {
                         screen: Screens.c2WaitingScreenJustWhateverText,
                         text: 'Vote submitted! Waiting for others to vote...'
                     });

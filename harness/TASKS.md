@@ -14,34 +14,20 @@ Written alongside the 2026-07-15 sweep; five tasks landed the same day (see Done
 - **T13** — assigned questions stored server-side (CNG-006). `318dae1`
 - **T3 (correctness half)** — timer cascade + blind timeouts (CNG-003, -011, -025). `1e8912f`
 - **T6** — one method per transition; -520 lines (CNG-023, -010, -013, -014, part of -022). `25d439f`
-- **T8** — integration suite behind `npm test` (CNG-021).
+- **T8** — integration suite behind `npm test` (CNG-021). `de6bd50`
+- **T7 (revised)** — identity accepted as claimed-not-proved; fixed the honest-player bugs it was hiding (CNG-012, -020, -026).
 
 Every one was verified against a running server, not just compiled. Scripts live in
 the session scratchpad and should be folded into T8.
 
 ## Now
 
-### T7 — Server-side identity
-Closes **CNG-009**, **CNG-008**, **CNG-019**, **CNG-012**, **CNG-020**.
+Nothing queued. The five original criticals are fixed, and the identity question is
+settled (see the decision note in `ISSUES.md`).
 
-The last structural root cause, and now the largest thing left. Handlers still take the
-actor's `name` from the event payload and act on it without checking it against the
-socket it arrived on, so any client can answer, lie or vote as anyone else — and anyone
-typing an existing name is merged onto that player's identity and starts receiving their
-screens.
-
-Keep a `socketId → {code, name}` map; read the actor from it instead of the payload.
-Mint a per-player token at first join and require it to reclaim a name. Mint a host token
-at `newGame` (today `identify` accepts `role: 'host'` for any code from anyone, which
-also leaks every answer before the reveal). Make `addLie`/`addVote` upsert by username
-(CNG-012), and reject self-votes server-side (CNG-020).
-
-Constraint from `todo.txt`: reclaiming a name after falling out of a game must keep
-working — that's why it's token-on-reclaim rather than simply rejecting duplicates.
-
-T6 landed first, so there's now one place per transition to thread identity through.
-
-## Next
+The one item with real substance left is the **T3 remainder** — moving the countdown off
+the host's browser — because a host who closes their tab currently stalls the game. It is
+robustness, not correctness: the phase token already stops stale and duplicate timers.
 
 ## Backlog
 
@@ -56,7 +42,6 @@ T6 landed first, so there's now one place per transition to thread identity thro
 
 - **T9** — Remove or gate `killServer` (**CNG-015**). Any client can kill the process.
 - **T11** — Fix H5 auto-continue re-arming (**CNG-017**).
-- **T12** — Clear `userAnswers` and `usedQuestionIndexes` on `startGame` (**CNG-010**).
 
 ## Absorbed from todo.txt
 
@@ -66,8 +51,8 @@ T6 landed first, so there's now one place per transition to thread identity thro
 |---|---|
 | "if you refresh your screen, you don't lose your location" | **Done** — T2 / CNG-005 |
 | "if a gave has no activity for enough time that it gets deleted" | **Done** — T5 / CNG-016 |
-| "if you create a username that already exists that it fusses" / "replace that user so that it is possible to get back into the game" | T7 / CNG-008 |
+| "if you create a username that already exists that it fusses" / "replace that user so that it is possible to get back into the game" | **Settled** — reclaim-by-name kept deliberately; see the decision note in `ISSUES.md`. The "fusses" half is explicitly *not* wanted. |
 | "Fix the control c thing which is bypassing the state of the game being saved" | **Done** — the SIGINT handler existed but saved an incomplete state; T5 / CNG-002 |
 
-The rest of `todo.txt` appears complete. Only the CNG-008 line is still live; delete
-`todo.txt` once T7 lands, so there's one place to look.
+Every line in `todo.txt` is now either done or settled above. It can be deleted — this
+file is the one place to look.
