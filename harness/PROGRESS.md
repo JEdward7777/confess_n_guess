@@ -507,3 +507,46 @@ If a remote kill is ever wanted back for dev convenience, gate it behind an env 
 than leaving it open to every client.
 
 Backlog is now empty.
+
+---
+
+## 2026-07-15 — Join QR code (CNG-029), and where this thing actually runs
+
+**Hosting, asked and answered:** nowhere. No Dockerfile, Procfile, CI, or cloud config; no
+URL in the source but `localhost`; the only remote is the GitHub repo. It's built to be
+self-hosted on a LAN — the server serves the client from its own origin, binds `*:3001`,
+and the client resolves its server as whatever origin served the page. Verified in the
+built bundle rather than from the source line: `const URL = void 0`, so Vite folds the
+`NODE_ENV` check and `io(undefined)` connects back to the serving origin. `npm run build &&
+npm start` on a laptop *is* the deployment. Pushed the session's 15 commits.
+
+**CNG-029.** Looking for hosting turned up a live trap: the QR code — the join mechanism —
+was built from the host browser's own URL, so opening the host page at `localhost:3001`
+(the obvious thing on the server machine) produced a QR every phone would fail to scan.
+
+**The user's spec was sharper than my instinct** and worth recording. I would have reached
+for "ask the server where it lives". That's wrong: behind a reverse proxy the server's
+address is internal and `window.location` is the *only* correct answer. So the rule is
+narrow — trust the address bar always, except for a loopback hostname, where it cannot
+possibly be right.
+
+One refinement fell out of that reasoning: only the **hostname** is wrong on loopback.
+Keeping the browser's port and path means a reverse proxy on the same box still works —
+`localhost:8080` becomes `192.168.x.x:8080`, going *through* the proxy instead of around it
+to the app's port.
+
+Put `buildJoinUrl`/`isLoopbackHostname` in `IncludeStuff.ts` — shared, pure, testable —
+rather than in the component where no test could reach them. Server-side, `getLanHost()`
+prefers private ranges because a machine with Docker or a VPN up lists unreachable bridges
+first. The host screen now shows the join URL under the QR and says so plainly when it's
+still a dud.
+
+Verified both directions, and the interesting one is that **making it always substitute
+turns the reverse-proxy tests red** — the guard protects the user's actual requirement, not
+just the bug I noticed.
+
+**Also filed CNG-030** (not fixed): the server serves `confess_n_guess_client/dist`, which
+is gitignored, while the server's own `dist/` is committed. A fresh clone plus `npm start`
+serves nothing. Works here only because the build output has sat there since April. Needs a
+decision — commit the client build for consistency, or make `npm start` depend on the build
+— so it's left open rather than guessed at.

@@ -10,6 +10,7 @@ const path = require('path');
 const { TestServer } = require('./server');
 
 const TESTS = [
+    'join-url.test.js',
     'host-exclusion.test.js',
     'question-stability.test.js',
     'reconnect.test.js',

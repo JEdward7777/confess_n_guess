@@ -36,6 +36,8 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-026](#cng-026) | High | **Fixed** | Post-submit confirmations only reach the submitting socket, so sibling tabs stay live |
 | [CNG-027](#cng-027) | High | **Fixed** | The only clock lived in the host's browser, so a host closing their tab froze the game |
 | [CNG-028](#cng-028) | High | **Fixed** | The reveal and points screens have no server clock, so an absent host still freezes the game |
+| [CNG-029](#cng-029) | High | **Fixed** | A host on localhost produces a QR code nobody can scan |
+| [CNG-030](#cng-030) | Medium | Open | A fresh clone serves nothing — the client build is gitignored but the server serves it |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -923,3 +925,65 @@ relationship `timerExpired` now has to `startPhaseTimer`.
 CNG-017 (the H3/H5 auto-continue re-arming forever) is the same code and is fixed
 alongside — it is only cosmetic *because* these timers normally unmount, and they are
 load-bearing until this is fixed.
+
+---
+
+### CNG-029
+**A host on localhost produces a QR code nobody can scan**
+High · **Fixed 2026-07-15** · `confess_n_guess_client/src/H1CollectingUsersPage.tsx:32`
+
+The QR code is the join mechanism, and it was built from
+`window.location.origin + window.location.pathname`. That encodes whatever URL the *host's
+browser* happens to be on. Open the host page at `http://localhost:3001` — the obvious
+thing to do on the machine running the server — and the QR says `localhost`. Every phone
+that scans it tries to reach *itself* and fails, with no clue as to why.
+
+**Fixed narrowly, at the user's direction**, and the narrowness is the point. The obvious
+fix — always use the server's LAN address — is wrong: behind a reverse proxy the server's
+address is an internal detail no phone can reach, and `window.location` is the *only*
+correct answer. So:
+
+- the host's address bar is used as-is, always, except
+- when its hostname is loopback (`localhost`, `127.0.0.1`, `::1`), where it cannot possibly
+  be right, the server's LAN address is substituted.
+
+Only the **hostname** is replaced. Keeping the port and path means a reverse proxy on the
+same box still works: browsing `localhost:8080` yields `192.168.x.x:8080`, going *through*
+the proxy rather than around it to the app's own port.
+
+`buildJoinUrl`/`isLoopbackHostname` live in `IncludeStuff.ts` — shared, pure, and therefore
+testable, rather than buried in a component where nothing could reach them. The server
+reports its address via `requestJoinHost`, preferring private ranges (192.168 → 10 →
+172.16-31), because a machine with Docker or a VPN up lists bridges nobody can reach first.
+
+The host screen now also shows the join URL under the QR, and says so plainly when it's
+still loopback (no LAN address available) rather than letting people scan a dud.
+
+Verified both ways: making it always substitute breaks the reverse-proxy cases; making it
+never substitute breaks the localhost rescue. `tests/join-url.test.js`.
+
+---
+
+### CNG-030
+**A fresh clone serves nothing — the client build is gitignored but the server serves it**
+Medium · Open · `confess_n_guess_client/.gitignore:11`, `src/index.ts:16-17`
+
+`src/index.ts` serves `confess_n_guess_client/dist/` via `express.static`. That directory is
+gitignored, while the *server's* `dist/` is committed. So a fresh clone plus `npm start`
+gives a running server that serves nothing until someone runs `npm run build`.
+
+It works on the current machine only because the build output has been sitting there since
+April. Nothing warns about it.
+
+Not urgent — there's no deployment (see below) and the owner's machine is fine. Options:
+commit the client build to match the server's, or have `npm start` depend on `npm run
+build`. The second is cleaner; the first is more consistent with how `dist/` is already
+treated. Worth a decision rather than a default.
+
+**Context: this project isn't hosted anywhere.** No Dockerfile, Procfile, CI, or cloud
+config; no URL in the source but `localhost`. It is built to be self-hosted on a LAN — the
+server serves the client from its own origin, binds `*:3001` (all interfaces), and the
+client resolves its server as `undefined`, i.e. whatever origin served the page (verified in
+the built bundle: `const URL = void 0`). `npm run build && npm start` on a laptop *is* the
+deployment. CNG-029's reverse-proxy handling exists because that is the one other way this
+plausibly gets run.

@@ -1,4 +1,5 @@
 import { Server, Socket } from 'socket.io';
+import * as os from 'os';
 import { GameState, GamePhase } from './GameState';
 import { Screens, ClientGameState, UserAnswer } from './IncludeStuff';
 
@@ -17,6 +18,37 @@ const RESTART_SECONDS = Number(process.env.CNG_RESTART_SECONDS) || 30;
 // mid-reveal and cut the host off. This only exists to answer "nobody is driving" - the
 // same relationship timerExpired has to the server's own timer (CNG-028).
 const BACKSTOP_SECONDS = Number(process.env.CNG_BACKSTOP_SECONDS) || 240;
+
+/**
+ * The address other machines on the network can reach this server at, or null if there
+ * isn't one. Only used to rescue a QR code when the host opened the game at localhost -
+ * see buildJoinUrl. Behind a reverse proxy this is an internal detail and must not be
+ * used, which is why the decision lives with the client's address bar, not here.
+ *
+ * Prefers the private ranges a party is actually on. A machine with Docker or a VPN up has
+ * several candidates and the first one the OS lists is often a bridge nobody can reach.
+ */
+function getLanHost(): string | null {
+    const candidates: string[] = [];
+    const interfaces = os.networkInterfaces();
+    for (const name in interfaces) {
+        for (const iface of interfaces[name] || []) {
+            // Node <18 reports family as 'IPv4', newer as 4.
+            const isIPv4 = iface.family === 'IPv4' || (iface.family as unknown as number) === 4;
+            if (!isIPv4 || iface.internal) continue;
+            candidates.push(iface.address);
+        }
+    }
+
+    const rank = (ip: string): number => {
+        if (ip.startsWith('192.168.')) return 0;
+        if (ip.startsWith('10.')) return 1;
+        if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 2;
+        return 3;
+    };
+    candidates.sort((a, b) => rank(a) - rank(b));
+    return candidates[0] ?? null;
+}
 
 // Normalize game code to uppercase for case-insensitive matching
 function normalizeCode(code: string): string {
@@ -947,6 +979,14 @@ export class SocketHandlers {
                     }
                 });
             }
+        });
+
+        // Asked for by the host screen, and only when its own address bar says localhost.
+        // See buildJoinUrl for why the client decides this rather than the server.
+        socket.on('requestJoinHost', () => {
+            const lanHost = getLanHost();
+            console.log('Join host requested, offering: ' + lanHost);
+            socket.emit('joinHost', { lanHost });
         });
 
         socket.on('startGame', ({ code }: { code: string }) => {

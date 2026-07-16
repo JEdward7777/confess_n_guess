@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import {socket} from './socket';
 
 //import React from 'react';
-import {ClientGameState} from './../../src/IncludeStuff';
+import {ClientGameState, buildJoinUrl, isLoopbackHostname} from './../../src/IncludeStuff';
 import { QRCodeSVG } from 'qrcode.react';
 
 //Single argument of game state.
@@ -24,15 +24,34 @@ interface H1CollectingUsersPageProps {
 const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
 
     const [joinUrl, setJoinUrl] = useState<string>("");
+    const [lanHost, setLanHost] = useState<string | null>(null);
+
+    // Our own address bar is normally the right answer for the QR code, and behind a
+    // reverse proxy it is the only right answer - the server's address is internal and no
+    // phone can reach it. The one case it can't answer is loopback: "localhost" means
+    // "this machine" to whoever scans it, so the phone tries to reach itself. Only then do
+    // we ask the server where it actually lives.
+    useEffect(() => {
+        if (!isLoopbackHostname(window.location.hostname)) return;
+
+        function onJoinHost({ lanHost }: { lanHost: string | null }) {
+            setLanHost(lanHost);
+        }
+        socket.on('joinHost', onJoinHost);
+        socket.emit('requestJoinHost');
+        return () => socket.off('joinHost', onJoinHost);
+    }, []);
 
     useEffect(() => {
-        // Build the join URL
         const code = gameState?.sharedState?.code;
         if (code) {
-            const baseUrl = window.location.origin + window.location.pathname;
-            setJoinUrl(`${baseUrl}?code=${code}`);
+            setJoinUrl(buildJoinUrl(window.location.href, lanHost, code));
         }
-    }, [gameState?.sharedState?.code]);
+    }, [gameState?.sharedState?.code, lanHost]);
+
+    // If we're on loopback and the server had no LAN address to offer, the QR is a dud and
+    // saying so beats letting people scan it and wonder.
+    const qrIsUnreachable = isLoopbackHostname(new URL(joinUrl || window.location.href).hostname);
 
     const startGame = () => {
         socket.emit( "startGame", {code:gameState?.sharedState?.code} );
@@ -52,6 +71,17 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
                     <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '10px' }}>
                         <QRCodeSVG value={joinUrl} size={200} includeMargin={true} />
                         <p style={{ marginTop: '10px', fontSize: '14px', color: '#666', backgroundColor: 'white' }}>Scan to join</p>
+                        {/* Show the URL: it's what makes a wrong guess visible, and it's
+                            readable out loud when someone's camera won't cooperate. */}
+                        <p style={{ margin: 0, fontSize: '11px', color: '#999', backgroundColor: 'white', wordBreak: 'break-all', maxWidth: '200px' }}>
+                            {joinUrl}
+                        </p>
+                        {qrIsUnreachable && (
+                            <p style={{ marginTop: '8px', fontSize: '11px', color: '#c00', backgroundColor: 'white', maxWidth: '200px' }}>
+                                This address only works on this machine. Open the host page
+                                using this computer's network address so phones can join.
+                            </p>
+                        )}
                     </div>
                 )}
                 
