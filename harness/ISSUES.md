@@ -37,7 +37,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-027](#cng-027) | High | **Fixed** | The only clock lived in the host's browser, so a host closing their tab froze the game |
 | [CNG-028](#cng-028) | High | **Fixed** | The reveal and points screens have no server clock, so an absent host still freezes the game |
 | [CNG-029](#cng-029) | High | **Fixed** | A host on localhost produces a QR code nobody can scan |
-| [CNG-030](#cng-030) | Medium | Open | A fresh clone serves nothing — the client build is gitignored but the server serves it |
+| [CNG-030](#cng-030) | Medium | **Fixed** | A fresh clone serves nothing — the client build is gitignored but the server serves it |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -966,7 +966,18 @@ never substitute breaks the localhost rescue. `tests/join-url.test.js`.
 
 ### CNG-030
 **A fresh clone serves nothing — the client build is gitignored but the server serves it**
-Medium · Open · `confess_n_guess_client/.gitignore:11`, `src/index.ts:16-17`
+Medium · **Fixed 2026-07-16** · `confess_n_guess_client/.gitignore:11`, `src/index.ts:16-17`
+
+> Fixed with an npm `prestart` hook (`scripts/ensure-build.js`): builds only what is
+> missing — client deps, client build, server build — and does nothing when they exist,
+> so the normal start stays instant and the hot-patch loop is not second-guessed.
+>
+> Verified against an actual `git clone`, which accidentally produced its own baseline:
+> the clone got the committed (pre-fix) code, and `npm start` served **Express's default
+> 404 page** — whose `<!DOCTYPE html>` fooled the first "is it serving?" check. Lesson
+> banked: assert on content (`id="root"`, the bundle path), never on "returned some HTML".
+> With the fix copied in: deps installed, client built, HTTP 200 with the real app, and a
+> second start skipped the build entirely.
 
 `src/index.ts` serves `confess_n_guess_client/dist/` via `express.static`. That directory is
 gitignored, while the *server's* `dist/` is committed. So a fresh clone plus `npm start`

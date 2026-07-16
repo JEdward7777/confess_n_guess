@@ -4,6 +4,7 @@
   "description": "A knockoff of fibbage LLM style.",
   "main": "index.js",
   "scripts": {
+    "prestart": "node scripts/ensure-build.js",
     "start": "node dist/index.js",
     "build_server": "tsc",
     "build_client": "(cd confess_n_guess_client && npm run build)",

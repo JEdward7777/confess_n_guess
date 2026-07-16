@@ -550,3 +550,21 @@ is gitignored, while the server's own `dist/` is committed. A fresh clone plus `
 serves nothing. Works here only because the build output has sat there since April. Needs a
 decision — commit the client build for consistency, or make `npm start` depend on the build
 — so it's left open rather than guessed at.
+
+---
+
+## 2026-07-16 — npm start self-heals a missing build (CNG-030)
+
+**Done.** `prestart` hook (`scripts/ensure-build.js`) builds only what's missing: client
+deps, client build, server build. Present means untouched — start stays instant, and it
+deliberately does not try to answer "is the build stale?", because that's the developer's
+call and the hot-patch loop (edit → build_server → restart) shouldn't be second-guessed by
+a wrapper.
+
+**Verified against a real `git clone`, and the clone taught two things.** First, it cloned
+the *committed* state — without the fix — which handed me an honest pre-fix baseline: `npm
+start` on a fresh clone serves Express's default 404 page. Second, that 404 page begins
+with `<!DOCTYPE html>`, which sailed straight past my "did it serve HTML?" check. Assert on
+content — `id="root"`, the asset path — never on "some HTML came back". With the fix copied
+into the clone: deps installed themselves, the client built, GET / returned the actual app,
+and a second start skipped everything.
