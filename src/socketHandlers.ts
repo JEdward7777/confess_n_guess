@@ -832,6 +832,7 @@ export class SocketHandlers {
             
             if (gameState) {
                 console.log('joining game ' + code);
+                gameState.touch();
                 socket.join(code);
                 
                 // Initialize socket tracking if not exists (for loaded games)
@@ -880,6 +881,10 @@ export class SocketHandlers {
                 });
                 return;
             }
+
+            // A human reconnecting counts as activity; the server's own churn does not
+            // (CNG-033).
+            gameState.touch();
 
             // Initialize socket tracking if not exists
             if (!this.socketStuff[code]) {
@@ -933,6 +938,8 @@ export class SocketHandlers {
                      this.socketStuff[code] = { hostSocketIds: [], playerSockets: {} };
                  }
                  
+                 gameState.touch();
+
                  // If user already exists, KEEP their state and just add new socket connection
                  // This preserves their game state (points, answers, lies, etc.) on reconnection
                  if (gameState.userExists(name)) {
@@ -1024,6 +1031,7 @@ export class SocketHandlers {
                 // Wipe anything left from a previous game in this room: answers, question
                 // assignments, lies, votes, the lie target, and the used-question pool.
                 // resetLieData() alone left answers and the pool behind (CNG-010).
+                gameState.touch();
                 gameState.resetForNewGame();
 
                 this.beginAnsweringRound(code, gameState,
@@ -1228,6 +1236,7 @@ export class SocketHandlers {
             const gameState = this.games[code];
             
             if (gameState && gameState.getPhase() === GamePhase.ShowingLieResults) {
+                gameState.touch();
                 this.showPoints(code, gameState);
             }
         });
@@ -1238,6 +1247,7 @@ export class SocketHandlers {
             const gameState = this.games[code];
             
             if (gameState && gameState.getPhase() === GamePhase.ShowingPoints) {
+                gameState.touch();
                 // Next player's round, or the winner if that was the last one.
                 this.advanceToNextLieRoundOrEnd(code, gameState);
             }

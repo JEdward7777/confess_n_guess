@@ -14,6 +14,7 @@ const TESTS = [
     'host-exclusion.test.js',
     'question-stability.test.js',
     'question-pool.test.js',
+    'idle-sweep.test.js',
     'reconnect.test.js',
     'timer.test.js',
     'multi-device.test.js',

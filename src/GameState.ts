@@ -126,7 +126,14 @@ export class GameState {
         this.phaseToken++;
     }
 
-    /** Mark the game as alive. Anything idle long enough gets swept (CNG-016). */
+    /**
+     * Mark the game as alive. Anything idle long enough gets swept (CNG-016).
+     *
+     * "Alive" means A HUMAN DID SOMETHING - a submission, a join, a host click. Do not
+     * call this from server-driven transitions: setPhase used to touch, and the server's
+     * own timers go through setPhase, so an abandoned game churning through restarts kept
+     * refreshing its own lastActivity and the sweep could never collect it (CNG-033).
+     */
     touch(): void {
         this.lastActivity = Date.now();
     }
@@ -284,9 +291,9 @@ export class GameState {
         this.assignedQuestions = {};
     }
 
-    // Phase management
+    // Phase management. Deliberately does NOT touch(): the server's timers come through
+    // here, and machine-driven churn must not count as activity (CNG-033).
     setPhase(phase: GamePhase): void {
-        this.touch();
         this.newSegment();
         this.currentPhase = phase;
     }
