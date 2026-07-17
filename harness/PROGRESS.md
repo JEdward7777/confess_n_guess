@@ -654,3 +654,19 @@ signal paths stay covered.
 The periodic save was recommended against and the user concurred by approving the minimal
 version: it would only protect against power loss and hard crashes mid-party. Recorded in
 ISSUES so it isn't re-proposed.
+
+---
+
+## 2026-07-16 — T18: one ballot order per round (CNG-035, CNG-040)
+
+`beginVoting` shuffles once and stores the ballot on `GameState`; every send — transition
+and resync alike — reuses it, and it's serialized (SAVE_VERSION → 3) so the order survives
+a hot-patch restart mid-vote. Both `ShowingLieResults` resync branches now call
+`buildResults`; the last pre-T6 hand-rolled copies (~60 lines) are gone.
+
+Red-first with four players so a coincidental reshuffle match is 1/24 per check: pre-fix,
+a refresh reordered `[alice,dana,carol,bob]` → `[dana,carol,alice,bob]` and the restart
+reshuffled again. Green after, including order-across-restart. 14/14.
+
+With this, every structural finding from both sweeps is closed. Remaining: two nits (T22)
+and runtime pruning (T23), both Low.

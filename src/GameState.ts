@@ -1,4 +1,4 @@
-import { UserPoints, SharedState, Screens } from './IncludeStuff';
+import { UserPoints, SharedState, Screens, UserAnswer as BallotEntry } from './IncludeStuff';
 
 export enum GamePhase {
     CollectingUsers = 'collectingUsers',
@@ -69,7 +69,7 @@ export class GameState {
      * Bump when a change makes older saves unreadable. fromJSON drops anything that
      * doesn't match rather than loading it into a shape the code no longer expects.
      */
-    static readonly SAVE_VERSION = 2;
+    static readonly SAVE_VERSION = 3; // v3: adds currentBallot (CNG-040)
 
     private lastActivity: number;
     // Identifies the current timed segment of the game. Bumped whenever the game moves
@@ -92,6 +92,11 @@ export class GameState {
     private currentLieTargetPlayer: string;
     private lies: { [targetUsername: string]: Lie[] };
     private votes: { [targetUsername: string]: Vote[] };
+    // The round's ballot, shuffled ONCE when voting begins. Every send - transition and
+    // resync alike - reuses this order, so a refreshing voter isn't handed a fresh
+    // shuffle that reorders the options under them (CNG-040). Serialized, because the
+    // order has to survive a hot-patch restart mid-vote too.
+    private currentBallot: BallotEntry[] | null;
 
     constructor(gameCode: string) {
         this.sharedState = {
@@ -109,6 +114,7 @@ export class GameState {
         this.currentLieTargetPlayer = '';
         this.lies = {};
         this.votes = {};
+        this.currentBallot = null;
         this.lastActivity = Date.now();
         this.phaseToken = 0;
     }
@@ -436,6 +442,14 @@ export class GameState {
         }
     }
 
+    setBallot(ballot: BallotEntry[]): void {
+        this.currentBallot = ballot;
+    }
+
+    getBallot(): BallotEntry[] | null {
+        return this.currentBallot;
+    }
+
     // Get all votes for a target
     getVotesForPlayer(targetUsername: string): Vote[] {
         return this.votes[targetUsername] || [];
@@ -528,6 +542,7 @@ export class GameState {
         this.lies = {};
         this.votes = {};
         this.currentLieTargetPlayer = '';
+        this.currentBallot = null;
     }
 
     /**
@@ -571,6 +586,7 @@ export class GameState {
             currentLieTargetPlayer: this.currentLieTargetPlayer,
             lies: this.lies,
             votes: this.votes,
+            currentBallot: this.currentBallot,
             lastActivity: this.lastActivity,
             phaseToken: this.phaseToken
         };
@@ -598,6 +614,7 @@ export class GameState {
         gameState.currentLieTargetPlayer = data.currentLieTargetPlayer || '';
         gameState.lies = data.lies || {};
         gameState.votes = data.votes || {};
+        gameState.currentBallot = data.currentBallot || null;
         gameState.lastActivity = data.lastActivity || Date.now();
         gameState.phaseToken = data.phaseToken || 0;
         return gameState;

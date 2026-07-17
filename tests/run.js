@@ -19,6 +19,7 @@ const TESTS = [
     'timer.test.js',
     'multi-device.test.js',
     'reclaim-and-spectators.test.js',
+    'ballot-order.test.js',
     'timer-fires.test.js',
     'unattended.test.js',
     'fullgame.test.js',

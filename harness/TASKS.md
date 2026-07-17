@@ -23,13 +23,22 @@ the session scratchpad and should be folded into T8.
 
 ## Now
 
-### T18 — One ballot order per round; resyncs reuse the transition builders
-Closes **CNG-035**, **CNG-040**. The last piece of pre-T6 duplication: both resync
-functions hand-roll `buildResults`, and the player resync reshuffles the ballot on every
-refresh. Store the round's shuffled order on `GameState` (and in `toJSON` — it must
-survive a hot-patch restart), then point every send at it and at `buildResults`.
+Two small items remain; everything else in the register is Fixed, Won't-fix-by-decision,
+or Partly fixed with only nits outstanding.
+
+### T22 — CNG-041 leftovers
+H1 never renders `gameState.text` (the "need 2 players" message is invisible — render it
+or stop sending it), plus the standing merge-trap design note. Trivial.
+
+### T23 — CNG-038: runtime pruning
+Long-running servers never prune idle games or `socketStuff` entries between saves. Only
+matters if the server runs for weeks unattended; a periodic sweep (which CNG-036's
+decision consciously skipped) would cover it. Low.
 
 ## Done (2026-07-16 batch)
+
+- **T18** — one ballot order per round, stored and serialized; resyncs collapsed onto
+  `buildResults` (CNG-035, -040). Red-first; SAVE_VERSION → 3.
 
 - **T15** — question pool recycles (CNG-032). `d58ff97` — red-first.
 - **T16** — activity means a human did something (CNG-033). `6b28dba` — red-first.

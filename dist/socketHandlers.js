@@ -226,31 +226,14 @@ class SocketHandlers {
                 });
                 break;
             case GameState_1.GamePhase.ShowingLieResults:
-                const truth1 = targetPlayer ? gameState.getTruthForPlayer(targetPlayer) : null;
-                const lies1 = targetPlayer ? gameState.getLiesForPlayer(targetPlayer) : [];
-                const votes1 = targetPlayer ? gameState.getVotesForPlayer(targetPlayer) : [];
-                if (targetPlayer && truth1) {
-                    const allAnswers = [
-                        { username: targetPlayer, answer: truth1.answer, isTruth: true },
-                        ...lies1.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    const voteCounts = {};
-                    votes1.forEach(v => {
-                        if (!voteCounts[v.selectedUsername])
-                            voteCounts[v.selectedUsername] = [];
-                        voteCounts[v.selectedUsername].push(v.voter);
-                    });
-                    const results = allAnswers.map(a => ({
-                        username: a.username,
-                        answer: a.answer,
-                        isTruth: a.isTruth,
-                        voters: voteCounts[a.username] || []
-                    }));
+                // One builder for every path (CNG-035); this was another pre-T6 inline
+                // copy of buildResults.
+                if (targetPlayer && gameState.getTruthForPlayer(targetPlayer)) {
                     sendState({
                         ...baseState,
                         screen: IncludeStuff_1.Screens.h3ShowTheLiesAndTruths,
                         text: `Results for ${targetPlayer}!`,
-                        answers: results
+                        answers: this.buildResults(gameState, targetPlayer)
                     });
                 }
                 else {
@@ -290,6 +273,7 @@ class SocketHandlers {
      * @param customTarget Optional override for target player (used when transitioning between lie rounds)
      */
     sendPlayerToCorrectScreen(code, gameState, playerName, socket, customTarget) {
+        var _a;
         const phase = gameState.getPhase();
         // Use custom target if provided, otherwise use game state
         const targetPlayer = customTarget || gameState.getCurrentLieTargetPlayer();
@@ -362,41 +346,22 @@ class SocketHandlers {
                     textToSend = 'Your vote has been submitted! Please wait for others...';
                 }
                 else {
-                    const truth = gameState.getTruthForPlayer(targetPlayer || '');
-                    const lies = gameState.getLiesForPlayer(targetPlayer || '');
-                    const allAnswers = [
-                        { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
-                        ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    answers = shuffleArray(allAnswers);
+                    // The round's stored ballot, in the order everyone is already
+                    // looking at. Re-shuffling here is how a refresh used to reorder
+                    // the options under the voter (CNG-040). The fallback only covers
+                    // a save from before ballots were stored.
+                    answers = (_a = gameState.getBallot()) !== null && _a !== void 0 ? _a : shuffleArray(this.buildResults(gameState, targetPlayer || '').map(({ voters, ...a }) => a));
                     screenToSend = IncludeStuff_1.Screens.c4PickTheBestAnswerOutOfAList;
                     textToSend = 'Vote for the TRUTH!';
                 }
                 break;
             case GameState_1.GamePhase.ShowingLieResults:
-                // Send to results screen too so they can see what happened
-                const truth2 = targetPlayer ? gameState.getTruthForPlayer(targetPlayer) : null;
-                const lies2 = targetPlayer ? gameState.getLiesForPlayer(targetPlayer) : [];
-                const votes2 = targetPlayer ? gameState.getVotesForPlayer(targetPlayer) : [];
-                const leaderboard = gameState.getLeaderboard();
-                if (targetPlayer && truth2) {
-                    const allAnswers2 = [
-                        { username: targetPlayer, answer: truth2.answer, isTruth: true },
-                        ...lies2.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
-                    ];
-                    const voteCounts = {};
-                    votes2.forEach(v => {
-                        if (!voteCounts[v.selectedUsername]) {
-                            voteCounts[v.selectedUsername] = [];
-                        }
-                        voteCounts[v.selectedUsername].push(v.voter);
-                    });
-                    answers = allAnswers2.map(a => ({
-                        username: a.username,
-                        answer: a.answer,
-                        isTruth: a.isTruth,
-                        voters: voteCounts[a.username] || []
-                    }));
+                // Send to results screen too so they can see what happened. One builder
+                // for every path - this branch was a pre-T6 hand-rolled copy of
+                // buildResults, which is the shape that drifted into CNG-004 and
+                // CNG-025 (see CNG-035).
+                if (targetPlayer && gameState.getTruthForPlayer(targetPlayer)) {
+                    answers = this.buildResults(gameState, targetPlayer);
                 }
                 screenToSend = IncludeStuff_1.Screens.h3ShowTheLiesAndTruths;
                 textToSend = targetPlayer ? `Results for ${targetPlayer}!` : 'Results';
@@ -583,11 +548,14 @@ class SocketHandlers {
         this.startPhaseTimer(code, gameState, ROUND_SECONDS);
         const truth = gameState.getTruthForPlayer(targetPlayer);
         const lies = gameState.getLiesForPlayer(targetPlayer);
-        // Shuffled so the truth isn't always in the same position.
+        // Shuffled ONCE so the truth isn't always in the same position, then stored:
+        // every later send - including a resync after a refresh or a restart - reuses
+        // this order rather than dealing a fresh shuffle (CNG-040).
         const answers = shuffleArray([
             { username: targetPlayer, answer: (truth === null || truth === void 0 ? void 0 : truth.answer) || '', isTruth: true },
             ...lies.map(l => ({ username: l.username, answer: l.lie, isTruth: false }))
         ]);
+        gameState.setBallot(answers);
         this.sendToHost(code, {
             screen: IncludeStuff_1.Screens.h2InformationScreenWithTimer,
             text: 'Voting on lies for ' + targetPlayer + '!',

@@ -65,6 +65,7 @@ class GameState {
         this.currentLieTargetPlayer = '';
         this.lies = {};
         this.votes = {};
+        this.currentBallot = null;
         this.lastActivity = Date.now();
         this.phaseToken = 0;
     }
@@ -348,6 +349,12 @@ class GameState {
             this.votes[targetUsername].push({ voter, selectedUsername });
         }
     }
+    setBallot(ballot) {
+        this.currentBallot = ballot;
+    }
+    getBallot() {
+        return this.currentBallot;
+    }
     // Get all votes for a target
     getVotesForPlayer(targetUsername) {
         return this.votes[targetUsername] || [];
@@ -429,6 +436,7 @@ class GameState {
         this.lies = {};
         this.votes = {};
         this.currentLieTargetPlayer = '';
+        this.currentBallot = null;
     }
     /**
      * Wipe everything belonging to a previous game in this room, so starting again is
@@ -470,6 +478,7 @@ class GameState {
             currentLieTargetPlayer: this.currentLieTargetPlayer,
             lies: this.lies,
             votes: this.votes,
+            currentBallot: this.currentBallot,
             lastActivity: this.lastActivity,
             phaseToken: this.phaseToken
         };
@@ -498,6 +507,7 @@ class GameState {
         gameState.currentLieTargetPlayer = data.currentLieTargetPlayer || '';
         gameState.lies = data.lies || {};
         gameState.votes = data.votes || {};
+        gameState.currentBallot = data.currentBallot || null;
         gameState.lastActivity = data.lastActivity || Date.now();
         gameState.phaseToken = data.phaseToken || 0;
         return gameState;
@@ -508,5 +518,5 @@ exports.GameState = GameState;
  * Bump when a change makes older saves unreadable. fromJSON drops anything that
  * doesn't match rather than loading it into a shape the code no longer expects.
  */
-GameState.SAVE_VERSION = 2;
+GameState.SAVE_VERSION = 3; // v3: adds currentBallot (CNG-040)
 //# sourceMappingURL=GameState.js.map

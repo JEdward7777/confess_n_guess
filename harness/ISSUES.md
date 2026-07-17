@@ -42,12 +42,12 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-032](#cng-032) | High | **Fixed** | Question pool exhaustion: players silently get no question, and the empty round restarts forever |
 | [CNG-033](#cng-033) | Medium | **Fixed** | Server-driven transitions count as "activity", so an abandoned churning game never idles out |
 | [CNG-034](#cng-034) | Medium | **Fixed** | Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame` |
-| [CNG-035](#cng-035) | Medium | Open | The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift |
+| [CNG-035](#cng-035) | Medium | **Fixed** | The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift |
 | [CNG-036](#cng-036) | Medium | **Fixed** | Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save |
 | [CNG-037](#cng-037) | Low | **Fixed** | Mid-round joiners are added to the current round's quorum, stalling it until the timer |
 | [CNG-038](#cng-038) | Low | Open | `socketStuff` and in-memory games are never pruned while the server runs |
 | [CNG-039](#cng-039) | Low | **Fixed** | Server accepts any name: empty, `<host>`, unbounded length |
-| [CNG-040](#cng-040) | Low | Open | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
+| [CNG-040](#cng-040) | Low | **Fixed** | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
 | [CNG-041](#cng-041) | Low | Partly fixed | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
@@ -1171,7 +1171,12 @@ and leave its screen split alone. Also fold in: delete `Screens.h4…` and
 
 ### CNG-035
 **The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift**
-Medium · Open · `src/socketHandlers.ts:225-253, 363-372, 375-406`
+Medium · **Fixed 2026-07-16** ·
+
+> Both `ShowingLieResults` resync branches now call `buildResults`; the voting resync
+> reuses the round's stored ballot. ~60 lines of inlined copies gone; no hand-rolled
+> results construction remains anywhere.
+> `src/socketHandlers.ts:225-253, 363-372, 375-406`
 
 T6 collapsed the *transitions* to one method each, but the two resync functions predate it
 and kept their own copies of the same constructions:
@@ -1282,7 +1287,14 @@ chars, the lobby renders these) server-side in `nameAndEmoji`, mirroring the CNG
 
 ### CNG-040
 **Resync reshuffles the ballot, so a refreshing voter sees the options in a new order**
-Low · Open · `src/socketHandlers.ts:363-372, 546-550`
+Low · **Fixed 2026-07-16** ·
+
+> `beginVoting` shuffles once and stores the ballot on `GameState`; every send reuses it.
+> Serialized (SAVE_VERSION → 3), so the order survives a hot-patch restart mid-vote too.
+> Red-first with four players (reshuffle coincidence 1/24 per check): pre-fix, refresh
+> reordered `[alice,dana,carol,bob]` → `[dana,carol,alice,bob]` and the restart reordered
+> again; green after, including the restart. `tests/ballot-order`.
+> `src/socketHandlers.ts:363-372, 546-550`
 
 `beginVoting` shuffles once and sends the same order to everyone (`:547`). A voter who
 refreshes mid-vote hits `sendPlayerToCorrectScreen`, which rebuilds the ballot and calls
