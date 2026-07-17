@@ -29,15 +29,12 @@ functions hand-roll `buildResults`, and the player resync reshuffles the ballot 
 refresh. Store the round's shuffled order on `GameState` (and in `toJSON` — it must
 survive a hot-patch restart), then point every send at it and at `buildResults`.
 
-### T19 — SIGTERM save (awaiting the user's decision on CNG-036)
-Recommendation delivered: mirror the SIGINT handler for SIGTERM (three lines), periodic
-save optional. The user may choose to leave it. Record the decision in ISSUES either way.
-
 ## Done (2026-07-16 batch)
 
 - **T15** — question pool recycles (CNG-032). `d58ff97` — red-first.
 - **T16** — activity means a human did something (CNG-033). `6b28dba` — red-first.
 - **T17** — orphaned handlers deleted, endGame guarded, H4 removed (CNG-034, part -041). `8c34db4` — usage verified in source, served bundle, and history first.
+- **T19** — SIGTERM saves like SIGINT (CNG-036); user approved the minimal version, periodic save deliberately not built. Red-first via restart-survival-over-SIGTERM.
 - **T14 + T20 + T21** — case-insensitive reclaim, spectators by user ruling, server-side name validation (CNG-031, -037, -039). Red-first; 13/13 suite.
 
 ## Absorbed from todo.txt

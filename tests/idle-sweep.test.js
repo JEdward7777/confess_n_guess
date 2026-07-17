@@ -41,7 +41,7 @@ module.exports = {
         // A second game with a live human, as the control: it must survive the sweep.
         const { host: host2, code: code2 } = await newGameWithHost(url);
 
-        await server.restart();
+        await server.restart('SIGINT'); // keeps the SIGINT save path covered
         const saved = server.savedGames();
 
         t.check('the abandoned game was dropped by the sweep',

@@ -45,6 +45,13 @@ process.on('SIGINT', () => {
     saveGameState();
     process.exit();
 });
+// SIGTERM is what plain `kill`, systemd and `docker stop` send, and Node does NOT run
+// 'exit' listeners for signals it default-handles - so without this, the save-on-restart
+// guarantee (CNG-002) silently depended on which signal stopped the server (CNG-036).
+process.on('SIGTERM', () => {
+    saveGameState();
+    process.exit();
+});
 
 // Load saved games if they exist. Restoring mid-game state is deliberate: it lets the
 // server be restarted to pick up a code change during a live game without replaying

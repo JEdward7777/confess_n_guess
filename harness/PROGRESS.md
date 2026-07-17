@@ -640,3 +640,17 @@ expectation changed from "pick a name" to "watches" — behavior change, not reg
 
 Remaining open: T18 (ballot order + resync dedup), T19/CNG-036 (user decision), the two
 H1/merge nits in CNG-041, CNG-038 (runtime pruning).
+
+---
+
+## 2026-07-16 — CNG-036: SIGTERM saves (user approved the minimal version)
+
+Three lines: SIGTERM now runs the same save-and-exit as SIGINT. The red check was nearly
+free — `restart-survival` already proves a round survives a restart, so switching its
+restart signal to SIGTERM *was* the test. Pre-fix it lost everything ("that game no longer
+exists" for every player); green after. `idle-sweep` keeps restarting via SIGINT so both
+signal paths stay covered.
+
+The periodic save was recommended against and the user concurred by approving the minimal
+version: it would only protect against power loss and hard crashes mid-party. Recorded in
+ISSUES so it isn't re-proposed.

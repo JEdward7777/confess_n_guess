@@ -77,9 +77,14 @@ class TestServer {
         }
     }
 
-    /** SIGINT so the exit handler saves games.json, then bring it back up. */
-    async restart() {
-        await this.stop('SIGINT');
+    /**
+     * Stop so the save handler runs, then bring it back up. Defaults to SIGTERM - the
+     * signal systemd, docker stop and plain `kill` send - because the save guarantee must
+     * not depend on which signal stopped the server (CNG-036). SIGINT stays covered by
+     * the idle-sweep test's restart.
+     */
+    async restart(signal = 'SIGTERM') {
+        await this.stop(signal);
         await this.up();
     }
 

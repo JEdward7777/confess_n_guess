@@ -43,7 +43,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-033](#cng-033) | Medium | **Fixed** | Server-driven transitions count as "activity", so an abandoned churning game never idles out |
 | [CNG-034](#cng-034) | Medium | **Fixed** | Three orphaned handlers still mutate live games: `selectBestAnswer`, `nextRound`, `endGame` |
 | [CNG-035](#cng-035) | Medium | Open | The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift |
-| [CNG-036](#cng-036) | Medium | Open | Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save |
+| [CNG-036](#cng-036) | Medium | **Fixed** | Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save |
 | [CNG-037](#cng-037) | Low | **Fixed** | Mid-round joiners are added to the current round's quorum, stalling it until the timer |
 | [CNG-038](#cng-038) | Low | Open | `socketStuff` and in-memory games are never pruned while the server runs |
 | [CNG-039](#cng-039) | Low | **Fixed** | Server accepts any name: empty, `<host>`, unbounded length |
@@ -1192,11 +1192,16 @@ having every send — transition and resync alike — reuse it.
 
 ### CNG-036
 **Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save**
-Medium · Open — **decision with the user** ·
+Medium · **Fixed 2026-07-16** ·
 
-> Asked 2026-07-16; recommendation given (a SIGTERM handler mirroring SIGINT — three
-> lines, no new behavior — with the periodic save as optional extra). The user may choose
-> to leave it; record the outcome here either way so it isn't re-litigated.
+> The user approved the recommended minimal version: a SIGTERM handler mirroring SIGINT.
+> The periodic save was recommended against and not built — it only protects against
+> power loss and hard crashes mid-party, which is a shrug at this scale. Decision
+> recorded; don't re-litigate the periodic save without new evidence.
+>
+> Red-first: `restart-survival` now restarts via SIGTERM (the signal `kill`, systemd and
+> `docker stop` send) and pre-fix lost everything — every player bounced to "that game no
+> longer exists". Green after; `idle-sweep` pins the SIGINT path so both stay covered.
 > `src/index.ts:44-52`
 
 `saveGameState` runs on `process.on('exit')` and `SIGINT`. Node does **not** fire `exit`
