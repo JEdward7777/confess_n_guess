@@ -702,3 +702,26 @@ decision, every fix has a test that has been seen red, and the queue is empty.**
 original report — "flaky connection issues where when someone refreshed their page people
 would swap rolls" — to here: 5 root causes for the reported symptom, 36 more found by
 sweeps and by tests, 15 integration tests, and a harness that carries the decisions.
+
+---
+
+## 2026-07-18 — The Cloudflare port begins (M0: preserve + plan)
+
+The user approved moving to Cloudflare Workers + Durable Objects and set the method:
+freeze the current state on a `socketio` branch, then tear up main, tracked through the
+harness like a proper engineering project.
+
+- Branch `socketio` pushed at `d483727` — the Node/socket.io version in the best shape of
+  its life: register clean, 15/15 green. It is the reference implementation and escape
+  hatch, not a maintenance target (no dual-target abstraction; decision recorded in
+  PORT.md non-goals).
+- `harness/PORT.md` written: goals, ten numbered decisions (D1–D10), eight milestones
+  (M0–M7) each with an acceptance check, four recorded risks. The load-bearing ones: the
+  wire protocol is frozen so the existing 15 tests are the port's correctness oracle
+  (D1/M6), timers become deadlines + one DO alarm with three duties (D3/D4), and the
+  client keeps its socket.io-shaped surface via a shim so the React screens don't change
+  (D2).
+- wrangler 4.112 installed; `wrangler dev` runs locally with no Cloudflare account, which
+  is why deploy is a documented user step rather than part of the port.
+
+Suite expectation during the port: red from M2 until M6, deliberately and visibly.
