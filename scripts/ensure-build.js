@@ -1,8 +1,8 @@
 // Runs before `npm start` (npm's prestart hook). Builds only what is missing.
 //
-// The server serves confess_n_guess_client/dist, which is gitignored, so a fresh clone
-// plus `npm start` used to give a running server that serves nothing (CNG-030). This makes
-// the missing build a self-healing condition instead of a silent one.
+// wrangler serves confess_n_guess_client/dist as static assets, and that directory is
+// gitignored - so a fresh clone plus `npm start` would have nothing to serve (CNG-030).
+// This makes the missing build a self-healing condition instead of a silent one.
 //
 // Deliberately does NOT rebuild when the output merely exists: `npm start` stays instant
 // for the normal workflow, and deciding "is it stale?" is the developer's call — the
@@ -19,7 +19,6 @@ const run = cmd => execSync(cmd, { cwd: root, stdio: 'inherit' });
 
 const clientDeps = path.join(root, 'confess_n_guess_client', 'node_modules');
 const clientBuild = path.join(root, 'confess_n_guess_client', 'dist', 'index.html');
-const serverBuild = path.join(root, 'dist', 'index.js');
 
 if (!fs.existsSync(clientBuild)) {
     console.log('[ensure-build] client build missing - building it (first run takes a minute)');
@@ -30,7 +29,3 @@ if (!fs.existsSync(clientBuild)) {
     run('npm run build_client');
 }
 
-if (!fs.existsSync(serverBuild)) {
-    console.log('[ensure-build] server build missing - building it');
-    run('npm run build_server');
-}

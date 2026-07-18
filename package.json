@@ -5,11 +5,13 @@
   "main": "index.js",
   "scripts": {
     "prestart": "node scripts/ensure-build.js",
-    "start": "node dist/index.js",
-    "build_server": "tsc",
+    "start": "wrangler dev",
+    "deploy": "npm run build_client && wrangler deploy",
+    "build_shared": "tsc",
     "build_client": "(cd confess_n_guess_client && npm run build)",
-    "build": "npm run build_client && npm run build_server",
-    "test": "npm run build_server && node tests/run.js",
+    "build": "npm run build_client && npm run build_shared",
+    "check_worker": "tsc -p tsconfig.worker.json",
+    "test": "npm run build && npm run check_worker && node tests/run.js",
     "test:only": "node tests/run.js"
   },
   "author": "Joshua Lansford",

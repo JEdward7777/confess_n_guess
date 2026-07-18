@@ -59,17 +59,23 @@ const ALL_QUESTIONS: string[] = [
     "If I could be proficient in any language, which one would it be?",
 ];
 
-// Tests trim the pool via CNG_QUESTION_COUNT so exhaustion is reachable in seconds
-// instead of ten rounds. Production ignores it and gets the whole bank.
-const QUESTION_POOL: string[] =
-    ALL_QUESTIONS.slice(0, Number(process.env.CNG_QUESTION_COUNT) || ALL_QUESTIONS.length);
+/**
+ * Optional construction config (PORT.md D5: there is no process.env on Workers, so the
+ * platform passes settings in explicitly).
+ *
+ * questionCount trims the pool so tests can reach exhaustion in seconds instead of ten
+ * rounds; production omits it and gets the whole bank.
+ */
+export interface GameStateConfig {
+    questionCount?: number;
+}
 
 export class GameState {
     /**
      * Bump when a change makes older saves unreadable. fromJSON drops anything that
      * doesn't match rather than loading it into a shape the code no longer expects.
      */
-    static readonly SAVE_VERSION = 3; // v3: adds currentBallot (CNG-040)
+    static readonly SAVE_VERSION = 4; // v4: timerDeadline replaces timerValue (PORT.md D3)
 
     private lastActivity: number;
     // Identifies the current timed segment of the game. Bumped whenever the game moves
@@ -84,10 +90,10 @@ export class GameState {
     private userAnswers: { [username: string]: UserAnswer };
     private currentPhase: GamePhase;
     private currentQuestionIndex: number;
-    private timerValue: number;
-    private timerInterval: NodeJS.Timeout | null;
-    // Timer tracking to prevent stale timer events
-    private timerStartTime: number;
+    // When the current timed segment runs out, as an epoch-ms deadline - or null when
+    // nothing is timed. A deadline serializes and survives hibernation/eviction, which a
+    // ticking interval cannot (PORT.md D3). The platform schedules its alarm from this.
+    private timerDeadline: number | null;
     // Lie phase tracking
     private currentLieTargetPlayer: string;
     private lies: { [targetUsername: string]: Lie[] };
@@ -98,7 +104,8 @@ export class GameState {
     // order has to survive a hot-patch restart mid-vote too.
     private currentBallot: BallotEntry[] | null;
 
-    constructor(gameCode: string) {
+    constructor(gameCode: string, config: GameStateConfig = {}) {
+        this.questions = ALL_QUESTIONS.slice(0, config.questionCount || ALL_QUESTIONS.length);
         this.sharedState = {
             users: {},
             code: gameCode
@@ -108,9 +115,7 @@ export class GameState {
         this.userAnswers = {};
         this.currentPhase = GamePhase.CollectingUsers;
         this.currentQuestionIndex = 0;
-        this.timerValue = 0;
-        this.timerInterval = null;
-        this.timerStartTime = 0;
+        this.timerDeadline = null;
         this.currentLieTargetPlayer = '';
         this.lies = {};
         this.votes = {};
@@ -148,15 +153,23 @@ export class GameState {
         return this.lastActivity;
     }
 
-    // Timer management
-    setTimerValue(value: number): void {
+    // Timer management: a new timed segment of `seconds` starts now.
+    startTimer(seconds: number): void {
         this.newSegment();
-        this.timerValue = value;
-        this.timerStartTime = Date.now();
+        this.timerDeadline = Date.now() + seconds * 1000;
     }
 
-    getTimerStartTime(): number {
-        return this.timerStartTime;
+    stopTimer(): void {
+        this.timerDeadline = null;
+    }
+
+    getTimerDeadline(): number | null {
+        return this.timerDeadline;
+    }
+
+    /** True when a timed segment exists and its deadline has passed. */
+    timerHasExpired(): boolean {
+        return this.timerDeadline !== null && Date.now() >= this.timerDeadline;
     }
 
     // Getters
@@ -176,8 +189,14 @@ export class GameState {
         return this.userAnswers;
     }
 
+    /**
+     * Seconds remaining, derived from the deadline - the wire shape
+     * (ClientGameState.timerValue) and the H2 countdown are unchanged from the Node
+     * version.
+     */
     getTimerValue(): number {
-        return this.timerValue;
+        if (this.timerDeadline === null) return 0;
+        return Math.max(0, Math.ceil((this.timerDeadline - Date.now()) / 1000));
     }
 
     // User management
@@ -238,7 +257,7 @@ export class GameState {
     }
 
     // Question management
-    private questions: string[] = QUESTION_POOL;
+    private questions: string[];
 
     getNextQuestion(): { question: string; index: number } | null {
         if (this.questions.length === 0) {
@@ -322,37 +341,6 @@ export class GameState {
     setPhase(phase: GamePhase): void {
         this.newSegment();
         this.currentPhase = phase;
-    }
-
-    /**
-     * Start the countdown for a new timed segment. This is the authoritative clock: the
-     * host's browser also counts down, but only so the players can see a number.
-     *
-     * onComplete only fires if the segment being timed is still the current one. Combined
-     * with stopTimer() on leaving a timed phase, that means a timer can never be applied
-     * to a phase it wasn't timing - the failure that CNG-003 was.
-     */
-    startTimer(seconds: number, onComplete: () => void): void {
-        this.stopTimer();
-        // Bumps the phase token and records the start time.
-        this.setTimerValue(seconds);
-        const segment = this.phaseToken;
-
-        this.timerInterval = setInterval(() => {
-            this.timerValue--;
-            if (this.timerValue > 0) return;
-            this.stopTimer();
-            if (this.phaseToken === segment) {
-                onComplete();
-            }
-        }, 1000);
-    }
-
-    stopTimer(): void {
-        if (this.timerInterval) {
-            clearInterval(this.timerInterval);
-            this.timerInterval = null;
-        }
     }
 
     // Check if all users have submitted answers
@@ -582,7 +570,7 @@ export class GameState {
             userAnswers: this.userAnswers,
             currentPhase: this.currentPhase,
             currentQuestionIndex: this.currentQuestionIndex,
-            timerValue: this.timerValue,
+            timerDeadline: this.timerDeadline,
             currentLieTargetPlayer: this.currentLieTargetPlayer,
             lies: this.lies,
             votes: this.votes,
@@ -597,12 +585,12 @@ export class GameState {
      * the caller drops it. Loading a save we only half understand is worse than losing
      * it: it produces a game that looks playable and isn't.
      */
-    static fromJSON(data: any, gameCode: string): GameState | null {
+    static fromJSON(data: any, gameCode: string, config: GameStateConfig = {}): GameState | null {
         if (!data || typeof data !== 'object') return null;
         if (data.version !== GameState.SAVE_VERSION) return null;
         if (!data.sharedState || typeof data.sharedState.users !== 'object') return null;
 
-        const gameState = new GameState(gameCode);
+        const gameState = new GameState(gameCode, config);
         gameState.sharedState = data.sharedState;
         gameState.sharedState.code = gameCode;
         gameState.usedQuestionIndexes = data.usedQuestionIndexes || [];
@@ -610,7 +598,7 @@ export class GameState {
         gameState.userAnswers = data.userAnswers || {};
         gameState.currentPhase = data.currentPhase || GamePhase.CollectingUsers;
         gameState.currentQuestionIndex = data.currentQuestionIndex || 0;
-        gameState.timerValue = data.timerValue || 0;
+        gameState.timerDeadline = data.timerDeadline ?? null;
         gameState.currentLieTargetPlayer = data.currentLieTargetPlayer || '';
         gameState.lies = data.lies || {};
         gameState.votes = data.votes || {};
