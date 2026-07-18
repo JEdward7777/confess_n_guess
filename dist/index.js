@@ -13,10 +13,13 @@ var httpPath = path.join(__dirname, "../confess_n_guess_client/dist/");
 app.use(express.static(httpPath));
 // Game state store
 const games = {};
-// Games idle longer than this are dropped rather than saved or loaded. Long enough to
-// survive a restart mid-game (the point of saving at all), short enough that the store
-// doesn't grow forever. Overridable so tests can watch the sweep work in seconds.
-const GAME_MAX_IDLE_MS = Number(process.env.CNG_GAME_MAX_IDLE_MS) || 12 * 60 * 60 * 1000; // 12 hours
+// The clean time, set by the user 2026-07-18: a game no human has touched for 24 hours
+// is dropped - at load, at save, and (see the sweep below) while the server runs. One
+// constant governs all three. Overridable so tests can watch it work in seconds.
+const GAME_MAX_IDLE_MS = Number(process.env.CNG_GAME_MAX_IDLE_MS) || 24 * 60 * 60 * 1000; // 24 hours
+// How often the running server checks. Hourly is plenty against a 24h window; the
+// guarantee is "cleaned within about an hour of hitting clean time".
+const SWEEP_INTERVAL_MS = Number(process.env.CNG_SWEEP_INTERVAL_MS) || 60 * 60 * 1000;
 function isExpired(gameState) {
     return Date.now() - gameState.getLastActivity() > GAME_MAX_IDLE_MS;
 }
@@ -80,6 +83,10 @@ const socketHandlers = new socketHandlers_1.SocketHandlers(io, games);
 // Restart the clock on anything that was mid-round when we went down. Timers aren't
 // serialisable, so without this a restored game resumes and then never advances.
 socketHandlers.resumeTimers();
+// Runtime sweep: without it, idle games only left memory at the next save, so a server
+// that stayed up hoarded abandoned games until Ctrl+C (CNG-038). unref() so the timer
+// never holds the process open on its own.
+setInterval(() => socketHandlers.pruneIdleGames(GAME_MAX_IDLE_MS), SWEEP_INTERVAL_MS).unref();
 io.on('connection', (socket) => {
     socketHandlers.handleConnection(socket);
 });

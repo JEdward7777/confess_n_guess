@@ -764,6 +764,27 @@ export class SocketHandlers {
      * reason to restart mid-game is to hot-patch code, and taking the players' thinking
      * time away as a side effect of the developer's rebuild would be its own bug.
      */
+    /**
+     * Drop every game no human has touched within maxIdleMs, along with its socket
+     * tracking, from the RUNNING server. The load/save sweeps use the same window; this
+     * exists because a server that stays up used to keep abandoned games (and their
+     * churn) in memory until the next Ctrl+C (CNG-038). Policy set by the user
+     * 2026-07-18: a 24-hour clean time.
+     */
+    pruneIdleGames(maxIdleMs: number): void {
+        const now = Date.now();
+        for (const code in this.games) {
+            const gameState = this.games[code];
+            if (now - gameState.getLastActivity() > maxIdleMs) {
+                // Stop the clock first or its interval keeps ticking on a deleted game.
+                gameState.stopTimer();
+                delete this.games[code];
+                delete this.socketStuff[code];
+                console.log('Pruned idle game ' + code + ' (no human activity for ' + Math.round((now - gameState.getLastActivity()) / 60000) + ' min)');
+            }
+        }
+    }
+
     resumeTimers(): void {
         for (const code in this.games) {
             const gameState = this.games[code];

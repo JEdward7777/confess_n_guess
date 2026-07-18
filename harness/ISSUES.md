@@ -45,7 +45,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-035](#cng-035) | Medium | **Fixed** | The two resync functions still hand-roll results/ballots — pre-T6 duplication that will drift |
 | [CNG-036](#cng-036) | Medium | **Fixed** | Non-SIGINT shutdown loses every game — SIGTERM has no handler and there is no periodic save |
 | [CNG-037](#cng-037) | Low | **Fixed** | Mid-round joiners are added to the current round's quorum, stalling it until the timer |
-| [CNG-038](#cng-038) | Low | Open | `socketStuff` and in-memory games are never pruned while the server runs |
+| [CNG-038](#cng-038) | Low | **Fixed** | `socketStuff` and in-memory games are never pruned while the server runs |
 | [CNG-039](#cng-039) | Low | **Fixed** | Server accepts any name: empty, `<host>`, unbounded length |
 | [CNG-040](#cng-040) | Low | **Fixed** | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
 | [CNG-041](#cng-041) | Low | **Fixed** | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
@@ -1254,7 +1254,17 @@ user if unsure.
 
 ### CNG-038
 **`socketStuff` and in-memory games are never pruned while the server runs**
-Low · Open · `src/socketHandlers.ts:80, 884-887`, `src/index.ts:38-42`
+Low · **Fixed 2026-07-18** ·
+
+> Policy set by the user: **a 24-hour clean time.** One constant (`GAME_MAX_IDLE_MS`, now
+> 24h, previously 12h) governs the load, save and runtime sweeps; an hourly `unref()`'d
+> interval enforces it on a running server, deleting the game, stopping its timer (so the
+> CNG-033 churn residue actually dies), and dropping its `socketStuff` entry.
+>
+> Red-first with a 2s window: pre-fix, the abandoned game's code still answered joins on
+> the live server; post-fix it's "Invalid game code", with a control proving a
+> recently-active game survives. `tests/runtime-prune`.
+> `src/socketHandlers.ts:80, 884-887`, `src/index.ts:38-42`
 
 The idle sweep runs only at load and save. A long-running server accumulates every game
 ever created (and its `socketStuff` entry — those aren't dropped even when the game is)

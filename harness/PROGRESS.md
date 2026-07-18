@@ -683,3 +683,22 @@ host-resync default — clear `text` explicitly. Verified end to end: a 1-player
 with the field cleared. 14/14. The user reserves the right to restyle it.
 
 Register status: only T23 (runtime pruning, Low, recommended defer) remains open.
+
+---
+
+## 2026-07-18 — T23: runtime sweep with a 24-hour clean time (CNG-038). Register clean.
+
+The user set the policy: 24 hours. One constant now governs the load, save and runtime
+sweeps (previously 12h, save/load only); an hourly unref()'d interval prunes games no
+human has touched, stopping their timers — which also finally kills the CNG-033 residue,
+where an abandoned game churned in memory until the next Ctrl+C.
+
+Red-first with a 2s window: pre-fix, the abandoned game's code still answered joins on the
+live server; post-fix "Invalid game code", with a control proving recently-active games
+survive. 15/15.
+
+**With this, the register is clean: all 41 issues are Fixed or Won't-fix-by-recorded-
+decision, every fix has a test that has been seen red, and the queue is empty.** From the
+original report — "flaky connection issues where when someone refreshed their page people
+would swap rolls" — to here: 5 root causes for the reported symptom, 36 more found by
+sweeps and by tests, 15 integration tests, and a harness that carries the decisions.
