@@ -1,0 +1,18 @@
+{
+    // Typechecks the Workers side (worker/ + the shared src/ modules it imports).
+    // Wrangler bundles the TypeScript itself; this config exists so `npm test` can fail
+    // on type errors the same way it does for the shared code.
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": ["esnext"],
+        "types": ["@cloudflare/workers-types"],
+        "strict": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "isolatedModules": true,
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": ["worker/**/*.ts", "src/GameState.ts", "src/IncludeStuff.ts"]
+}

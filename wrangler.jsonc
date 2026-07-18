@@ -1,0 +1,30 @@
+// Cloudflare Workers configuration for confess_n_guess (see harness/PORT.md).
+//
+// Free-plan notes: Durable Objects require the SQLite backend there, hence
+// new_sqlite_classes in the migration. Assets are served directly when a request matches
+// a file in the client build; /api/* and /ws/* never match files, so they fall through to
+// the worker.
+{
+    "name": "confess-n-guess",
+    "main": "worker/index.ts",
+    "compatibility_date": "2026-07-01",
+    "assets": {
+        "directory": "confess_n_guess_client/dist"
+    },
+    "durable_objects": {
+        "bindings": [
+            { "name": "GAME", "class_name": "GameDurableObject" }
+        ]
+    },
+    "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["GameDurableObject"] }
+    ],
+    // Game timing configuration (D5: no process.env on Workers). Tests override these
+    // via `wrangler dev --var`; production gets the defaults baked here.
+    "vars": {
+        "CNG_ROUND_SECONDS": "60",
+        "CNG_RESTART_SECONDS": "30",
+        "CNG_BACKSTOP_SECONDS": "240",
+        "CNG_CLEAN_TIME_MS": "86400000"
+    }
+}
