@@ -670,3 +670,16 @@ reshuffled again. Green after, including order-across-restart. 14/14.
 
 With this, every structural finding from both sweeps is closed. Remaining: two nits (T22)
 and runtime pruning (T23), both Low.
+
+---
+
+## 2026-07-18 — T22: the lobby shows what the server says (CNG-041 closed)
+
+H1 now renders `gameState.text`. The interesting half was the merge trap this walks into:
+rendering a merged field means a mid-game message ("Now submitting lies for Bob!") could
+leak into the lobby on a host resync. So the two lobby-bound emits — `newGame` and the
+host-resync default — clear `text` explicitly. Verified end to end: a 1-player Start shows
+"Need at least 2 players to start!" on the lobby, and a host resync to the lobby arrives
+with the field cleared. 14/14. The user reserves the right to restyle it.
+
+Register status: only T23 (runtime pruning, Low, recommended defer) remains open.

@@ -48,7 +48,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-038](#cng-038) | Low | Open | `socketStuff` and in-memory games are never pruned while the server runs |
 | [CNG-039](#cng-039) | Low | **Fixed** | Server accepts any name: empty, `<host>`, unbounded length |
 | [CNG-040](#cng-040) | Low | **Fixed** | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
-| [CNG-041](#cng-041) | Low | Partly fixed | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
+| [CNG-041](#cng-041) | Low | **Fixed** | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -1310,10 +1310,14 @@ restart mid-vote reorders every ballot). One stored order, every send reuses it.
 
 ### CNG-041
 **Client nits, collected**
-Low · Partly fixed 2026-07-16 · various
+Low · **Fixed 2026-07-18** · various
 
-> H4 (component, enum member, App branch) removed with CNG-034. Still open: H1 never
-> renders `gameState.text`, and the merge-trap design note.
+> H4 removed with CNG-034. H1 now renders `gameState.text` (the "need 2 players" message
+> was sent but invisible), and because rendering a merged field is exactly where the
+> merge trap bites, the two lobby-bound emits (`newGame`, the host resync default) clear
+> `text` explicitly — verified end to end: a 1-player Start shows the message, a lobby
+> resync arrives cleared. The merge-trap design note itself stays as documentation: emits
+> that add a rendered field must clear it on the screens that don't use it.
 >
 
 Small things spotted on the read that don't merit their own entries:

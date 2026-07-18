@@ -259,7 +259,9 @@ class SocketHandlers {
                 });
                 break;
             default:
-                sendState({ ...baseState, screen: IncludeStuff_1.Screens.h1CollectingUsers });
+                // text cleared explicitly: H1 renders it now, and the client merge would
+                // otherwise carry a mid-game message into the lobby (CNG-041).
+                sendState({ ...baseState, screen: IncludeStuff_1.Screens.h1CollectingUsers, text: '' });
         }
     }
     /**
@@ -814,6 +816,7 @@ class SocketHandlers {
                 sharedState: gameState.getSharedState(),
                 name: '<host>',
                 screen: IncludeStuff_1.Screens.h1CollectingUsers,
+                text: '',
                 error: ''
             });
         });

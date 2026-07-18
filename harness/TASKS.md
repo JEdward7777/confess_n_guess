@@ -23,17 +23,18 @@ the session scratchpad and should be folded into T8.
 
 ## Now
 
-Two small items remain; everything else in the register is Fixed, Won't-fix-by-decision,
+One item remains; everything else in the register is Fixed, Won't-fix-by-decision,
 or Partly fixed with only nits outstanding.
-
-### T22 — CNG-041 leftovers
-H1 never renders `gameState.text` (the "need 2 players" message is invisible — render it
-or stop sending it), plus the standing merge-trap design note. Trivial.
 
 ### T23 — CNG-038: runtime pruning
 Long-running servers never prune idle games or `socketStuff` entries between saves. Only
 matters if the server runs for weeks unattended; a periodic sweep (which CNG-036's
 decision consciously skipped) would cover it. Low.
+
+## Done (2026-07-18)
+
+- **T22** — H1 renders server text; lobby-bound emits clear it so the merge can't leak a
+  mid-game message into the lobby (CNG-041 closed).
 
 ## Done (2026-07-16 batch)
 

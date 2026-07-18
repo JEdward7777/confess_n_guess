@@ -94,6 +94,12 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
             <br />
             <button onClick={startGame} disabled={!canStart}>Start</button>
             {!canStart && <p style={{ color: '#ff6b6b', marginTop: '10px' }}>Need at least 2 players to start</p>}
+            {/* Whatever the server wants the host to know - previously sent but never
+                shown (CNG-041). The lobby-bound emits clear this field explicitly, so a
+                message left over from mid-game can't leak in via the client merge. */}
+            {gameState.text && (
+                <p style={{ color: '#ff9800', marginTop: '10px', fontWeight: 'bold' }}>{gameState.text}</p>
+            )}
         </div>
     );
 }
