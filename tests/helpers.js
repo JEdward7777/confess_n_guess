@@ -1,11 +1,12 @@
-// Shared plumbing for the integration tests.
+// Shared plumbing for the integration tests, Cloudflare edition (PORT.md D10).
 //
-// These drive real socket.io clients against a real server. There are no unit tests and
-// this codebase doesn't want them: nearly every bug found here has been about what the
-// server sends to whom, and only a real client can see that.
-
-const path = require('path');
-const { io } = require(path.join(__dirname, '..', 'confess_n_guess_client', 'node_modules', 'socket.io-client'));
+// These drive raw WebSockets against a real `wrangler dev` — the same {event, data}
+// JSON the browser shim speaks, because the wire protocol is the port's frozen
+// correctness oracle (D1). Node >= 21 has a global WebSocket, so no client dependency.
+//
+// The client object mirrors the browser shim: it connects lazily to /ws/<CODE> on the
+// first emit that carries a code, which is also how game creation works now — POST
+// /api/newGame first, then connect (the one protocol edge that differs from Node).
 
 /** Screen ids, mirroring the Screens enum in src/IncludeStuff.ts. */
 const S = {
@@ -13,7 +14,6 @@ const S = {
     h1Collecting: 1,
     h2Timer: 2,
     h3Results: 3,
-    h4Iterate: 4,
     h5Points: 5,
     h6Winner: 6,
     c1Name: 7,
@@ -28,50 +28,95 @@ const screenName = id => SCREEN_NAME[id] ?? String(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /**
- * A connected client that tracks the last state the server sent it, the way the real
- * client does: fields are merged, because the server doesn't resend everything each time.
+ * A lazily-connecting client. Tracks the last state the server sent the way the real
+ * client does: fields merge, because the server doesn't resend everything each time.
  */
-async function connect(url) {
-    const socket = io(url, { forceNew: true, transports: ['websocket'] });
+function connect(url) {
     const c = {
-        socket,
-        last: null,        // most recent screen
-        screens: [],       // every screen, in order
-        close: () => socket.close()
+        url,
+        ws: null,
+        code: null,
+        last: null,
+        screens: [],
+        _listeners: new Map(),
+        _queue: []
     };
-    socket.on('gameState', st => {
-        if (st.screen !== undefined) { c.last = st.screen; c.screens.push(st.screen); }
-        if (st.sharedState?.code) c.code = st.sharedState.code;
-        if (st.sharedState?.users) c.users = st.sharedState.users;
-        if (st.name !== undefined && st.name !== '') c.name = st.name;
-        if (st.error !== undefined) c.error = st.error;
-        if (st.question !== undefined) c.question = st.question;
-        if (st.targetPlayer !== undefined) c.targetPlayer = st.targetPlayer;
-        if (st.phaseToken !== undefined) c.phaseToken = st.phaseToken;
-        if (st.answers !== undefined) c.answers = st.answers;
-        if (st.leaderboard !== undefined) c.leaderboard = st.leaderboard;
-        if (st.text !== undefined) c.text = st.text;
-    });
-    await new Promise(r => socket.on('connect', r));
+
+    const fire = (event, data) => {
+        if (event === 'gameState') {
+            const st = data ?? {};
+            if (st.screen !== undefined) { c.last = st.screen; c.screens.push(st.screen); }
+            if (st.sharedState?.code) c.code = st.sharedState.code;
+            if (st.sharedState?.users) c.users = st.sharedState.users;
+            if (st.question !== undefined && st.question !== '') c.question = st.question;
+            if (st.targetPlayer !== undefined) c.targetPlayer = st.targetPlayer;
+            if (st.phaseToken !== undefined) c.phaseToken = st.phaseToken;
+            if (st.answers !== undefined) c.answers = st.answers;
+            if (st.leaderboard !== undefined) c.leaderboard = st.leaderboard;
+            if (st.text !== undefined) c.text = st.text;
+            if (st.name !== undefined && st.name !== '') c.name = st.name;
+            if (st.error !== undefined) c.error = st.error;
+        }
+        for (const fn of c._listeners.get(event) ?? []) fn(data);
+    };
+
+    const open = (code) => {
+        c.code = code;
+        const ws = new WebSocket(url.replace(/^http/, 'ws') + '/ws/' + code);
+        c.ws = ws;
+        ws.addEventListener('open', () => {
+            for (const msg of c._queue) ws.send(msg);
+            c._queue = [];
+        });
+        ws.addEventListener('message', ev => {
+            try {
+                const { event, data } = JSON.parse(ev.data);
+                fire(event, data);
+            } catch { /* not ours */ }
+        });
+        ws.addEventListener('error', e => { c.wsError = String(e?.message ?? e); });
+    };
+
+    c.socket = {
+        emit(event, data) {
+            // joinGame historically sent the bare code string; accept both shapes.
+            const payload = typeof data === 'string' ? { code: data } : (data ?? {});
+            const code = String(payload.code ?? c.code ?? '').toUpperCase();
+            if (event === 'joinGame') payload.code = code;
+            if (!code) throw new Error(`emit('${event}') with no game code to route by`);
+            if (!c.ws) open(code);
+            const msg = JSON.stringify({ event, data: payload });
+            if (c.ws.readyState === WebSocket.OPEN) c.ws.send(msg);
+            else c._queue.push(msg);
+        },
+        on(event, fn) {
+            if (!c._listeners.has(event)) c._listeners.set(event, new Set());
+            c._listeners.get(event).add(fn);
+        },
+        off(event, fn) {
+            c._listeners.get(event)?.delete(fn);
+        }
+    };
+    c.close = () => { try { c.ws?.close(); } catch { } };
     return c;
 }
 
-/** Host that has created a game and identified. Returns { host, code }. */
+/** Create a game over HTTP, connect its host socket, identify. Returns { host, code }. */
 async function newGameWithHost(url) {
-    const host = await connect(url);
-    host.socket.emit('newGame');
+    const res = await fetch(url + '/api/newGame', { method: 'POST' });
+    const { code } = await res.json();
+    if (!code) throw new Error('newGame allocated no code: ' + JSON.stringify(await res.text()));
+    const host = connect(url);
+    host.socket.emit('identify', { role: 'host', code });
     await sleep(300);
-    if (!host.code) throw new Error('server issued no game code');
-    host.socket.emit('identify', { role: 'host', code: host.code });
-    await sleep(150);
-    return { host, code: host.code };
+    return { host, code };
 }
 
 /** Join players by name. Returns a map of name -> client. */
 async function joinPlayers(url, code, names) {
     const players = {};
     for (const name of names) {
-        const p = await connect(url);
+        const p = connect(url);
         p.socket.emit('joinGame', code);
         await sleep(80);
         p.socket.emit('nameAndEmoji', { name, emoji: '😊', code });
@@ -81,12 +126,9 @@ async function joinPlayers(url, code, names) {
     return players;
 }
 
-/**
- * Simulate a browser refresh: a brand new socket that identifies with code+name, which
- * is exactly what App.tsx does on mount.
- */
+/** Simulate a browser refresh: a brand new socket that identifies with code+name. */
 async function refresh(url, code, name) {
-    const c = await connect(url);
+    const c = connect(url);
     c.socket.emit('identify', name === '<host>' ? { role: 'host', code } : { role: 'player', code, name });
     await sleep(250);
     return c;

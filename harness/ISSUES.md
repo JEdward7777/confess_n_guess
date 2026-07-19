@@ -49,6 +49,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-039](#cng-039) | Low | **Fixed** | Server accepts any name: empty, `<host>`, unbounded length |
 | [CNG-040](#cng-040) | Low | **Fixed** | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
 | [CNG-041](#cng-041) | Low | **Fixed** | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
+| [CNG-042](#cng-042) | High | **Fixed** | DO rehydration read a field toJSON never wrote, so every eviction "lost" the game |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -1348,3 +1349,24 @@ Small things spotted on the read that don't merit their own entries:
 - **`resumeTimers` gives restored rounds `ROUND_SECONDS` even if they were on the shorter
   restart clock** — deliberate-adjacent (full time back is the documented policy), just
   noting the asymmetry is known rather than overlooked.
+
+---
+
+### CNG-042
+**DO rehydration read a field toJSON never wrote, so every eviction "lost" the game**
+High · **Fixed 2026-07-18** · `worker/GameDO.ts` (constructor)
+
+Found during M6 of the Cloudflare port. The constructor's rehydrate guard checked
+`typeof data.code === 'string'` — but `toJSON()` has no top-level `code`; it lives in
+`sharedState.code`. So rehydration silently never ran: the blob sat intact on disk while
+the game answered "Invalid game code" after any eviction or restart.
+
+Two things worth keeping from this one:
+
+- **The M3 smoke test couldn't see it**, because a single warm process keeps the
+  in-memory instance — rehydration only runs on a cold start. Only the full suite's
+  restart tests (and wrangler dev's aggressive eviction) exposed it.
+- **One bug, six failing tests, several disguises.** Mid-test evictions made it look
+  like a first-reply race, a lost broadcast, and a restart-persistence failure all at
+  once. Fixing the one field turned all six tests green simultaneously. Risk R2 in
+  PORT.md ("hibernation surprises") named this class in advance.

@@ -1,16 +1,20 @@
-// Server lifecycle for the integration tests.
+// Server lifecycle for the integration tests: each test gets its own `wrangler dev`
+// (local Miniflare, no Cloudflare account) in its own persist directory.
 //
-// Runs the server in a scratch directory so its games.json never touches the real one,
-// and always tracks the node PID directly. Do not reach for `pkill -f` here: the pattern
-// matches the harness's own command line, which has bitten this project twice.
+// restart() kills and respawns against the same persist dir - that's what proves
+// storage-backed survival, the DO equivalent of the old SIGINT/games.json test. The
+// old savedGames() file introspection has no equivalent: DO storage is asserted through
+// behavior over the wire, which is what the tests should have trusted anyway.
+//
+// Processes are tracked as a group (wrangler spawns workerd underneath); killing by
+// pattern is banned here for the same reasons as ever - it has matched its own shell
+// twice in this project's history.
 
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const net = require('net');
-
-const SERVER_ENTRY = path.join(__dirname, '..', 'dist', 'index.js');
 
 function freePort() {
     return new Promise((resolve, reject) => {
@@ -24,88 +28,84 @@ function freePort() {
     });
 }
 
-async function waitForPort(port, timeoutMs = 8000) {
+async function waitForHttp(port, timeoutMs = 30000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        const up = await new Promise(resolve => {
-            const sock = net.connect(port, '127.0.0.1');
-            sock.on('connect', () => { sock.end(); resolve(true); });
-            sock.on('error', () => resolve(false));
-        });
-        if (up) return true;
-        await new Promise(r => setTimeout(r, 100));
+        try {
+            const res = await fetch(`http://localhost:${port}/`);
+            if (res.status < 500) return true;
+        } catch { /* not up yet */ }
+        await new Promise(r => setTimeout(r, 250));
     }
     return false;
 }
 
-/**
- * A server instance the test controls. `workDir` persists across restart() so saved
- * games survive, which is the whole point of the restart-survival test.
- */
 class TestServer {
-    constructor(port, workDir) {
+    constructor(port, workDir, env) {
         this.port = port;
         this.workDir = workDir;
+        this.env = env;
         this.url = `http://localhost:${port}`;
         this.proc = null;
+        this.log = '';
     }
 
-    /** `env` is merged into the server's environment - see CNG_ROUND_SECONDS. */
+    /** `env` entries become `wrangler dev --var KEY:VALUE` (PORT.md D5). */
     static async start(env = {}) {
-        if (!fs.existsSync(SERVER_ENTRY)) {
-            throw new Error(`${SERVER_ENTRY} missing - run "npm run build_server" first`);
-        }
         const port = await freePort();
         const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cng-test-'));
-        const server = new TestServer(port, workDir);
-        server.env = env;
+        const server = new TestServer(port, workDir, env);
         await server.up();
         return server;
     }
 
     async up() {
-        this.proc = spawn('node', [SERVER_ENTRY, String(this.port)], {
-            cwd: this.workDir,
+        const args = [
+            'wrangler', 'dev',
+            '--port', String(this.port),
+            '--inspector-port', '0',
+            '--persist-to', this.workDir
+        ];
+        for (const [k, v] of Object.entries(this.env)) {
+            args.push('--var', `${k}:${v}`);
+        }
+        this.proc = spawn('npx', args, {
+            cwd: path.join(__dirname, '..'),
             stdio: ['ignore', 'pipe', 'pipe'],
-            env: { ...process.env, ...(this.env || {}) }
+            detached: true // own process group, so stop() can take workerd down with it
         });
-        this.log = '';
         this.proc.stdout.on('data', d => { this.log += d; });
         this.proc.stderr.on('data', d => { this.log += d; });
-        if (!await waitForPort(this.port)) {
-            throw new Error(`server never bound :${this.port}\n${this.log}`);
+        if (!await waitForHttp(this.port)) {
+            throw new Error(`wrangler dev never answered on :${this.port}\n${this.log.slice(-2000)}`);
         }
     }
 
-    /**
-     * Stop so the save handler runs, then bring it back up. Defaults to SIGTERM - the
-     * signal systemd, docker stop and plain `kill` send - because the save guarantee must
-     * not depend on which signal stopped the server (CNG-036). SIGINT stays covered by
-     * the idle-sweep test's restart.
-     */
-    async restart(signal = 'SIGTERM') {
-        await this.stop(signal);
+    /** Kill and respawn against the same persist dir: DO storage must survive this. */
+    async restart() {
+        await this.stop();
         await this.up();
     }
 
-    savedGames() {
-        const f = path.join(this.workDir, 'games.json');
-        return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
-    }
-
-    stop(signal = 'SIGKILL') {
+    stop() {
         if (!this.proc) return Promise.resolve();
         const proc = this.proc;
         this.proc = null;
         return new Promise(resolve => {
             proc.on('exit', () => resolve());
-            proc.kill(signal);
-            setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} resolve(); }, 3000);
+            try { process.kill(-proc.pid, 'SIGTERM'); } catch { try { proc.kill('SIGTERM'); } catch { } }
+            // Generous grace: a SIGKILL here can drop Miniflare's final storage flush,
+            // which shows up as a game whose late writes vanished - users present,
+            // phase reverted. Measured once under load; not worth measuring twice.
+            setTimeout(() => {
+                try { process.kill(-proc.pid, 'SIGKILL'); } catch { }
+                resolve();
+            }, 15000);
         });
     }
 
     cleanup() {
-        try { fs.rmSync(this.workDir, { recursive: true, force: true }); } catch {}
+        try { fs.rmSync(this.workDir, { recursive: true, force: true }); } catch { }
     }
 }
 

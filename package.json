@@ -1,7 +1,7 @@
 {
   "name": "confess_n_guess",
   "version": "1.0.0",
-  "description": "A knockoff of fibbage LLM style.",
+  "description": "A Fibbage-style party game on Cloudflare Workers + Durable Objects.",
   "main": "index.js",
   "scripts": {
     "prestart": "node scripts/ensure-build.js",
@@ -17,13 +17,10 @@
   "author": "Joshua Lansford",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.4",
     "typescript": "^5.3.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260718.1",
-    "@types/express": "^4.17.21",
     "wrangler": "^4.112.0"
   }
 }

@@ -58,8 +58,8 @@ module.exports = {
         Object.values(P).forEach(c => c.close());
 
         await server.restart();
-        t.check('the restored game logged a resumed timer',
-            /Resuming timer for game/.test(server.log), server.log.split('\n').slice(-4).join(' | '));
+        // No "resumed timer" log to assert any more: alarms are durable, surviving the
+        // restart natively - the behavioral check below is the whole proof.
 
         // Reconnect one player and let the restored clock run out.
         const back = await refresh(url, code, names[1]);

@@ -27,14 +27,11 @@ the session scratchpad and should be folded into T8.
 these tasks map to its milestones. The Node/socket.io version is frozen on branch
 `socketio` (`d483727`).
 
-- **T24 / M0** — preserve + plan. ✅ done
-- **T25 / M1** — scaffold: wrangler.jsonc, worker tsconfig, deps; `wrangler dev` boots.
-- **T26 / M2** — GameState platform-pure: deadline timers, config injection, SAVE_VERSION 4.
-- **T27 / M3** — `worker/GameDO.ts`: hibernation sockets, dispatcher, transitions, alarm.
-- **T28 / M4** — `worker/index.ts`: newGame endpoint, ws routing, assets.
-- **T29 / M5** — client shim: socket.js keeps its surface, speaks native WebSocket.
-- **T30 / M6** — suite re-pointed at `wrangler dev`; **15/15 is the acceptance bar.**
-- **T31 / M7** — teardown of the Node server, deps, docs, scripts.
+- **T24–T31 / M0–M7** — ✅ all landed 2026-07-18; suite green against `wrangler dev`.
+  (Test count is 14: idle-sweep's subjects — save files, shutdown signals — no longer
+  exist as platform concepts; its live semantics moved into runtime-prune.)
+
+Remaining user step: `npx wrangler login` once, then `npm run deploy`.
 
 The pre-port register (CNG-001..041) is clean: everything Fixed or Won't-fix by recorded
 decision. Issues found during the port get new CNG numbers.

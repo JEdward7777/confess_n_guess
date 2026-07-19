@@ -62,12 +62,14 @@ module.exports = {
             ['localhost', 'LOCALHOST', '127.0.0.1', '::1'].every(isLoopbackHostname) &&
             !['192.168.1.5', 'example.com', '10.0.0.1'].some(isLoopbackHostname));
 
-        // --- and the server actually answers with something usable
-        const c = await connect(url);
+        // --- and the server actually answers. On Workers the answer is always
+        // { lanHost: null } (PORT.md D7: no os module, no LAN) - the client then keeps
+        // window.location, which is correct everywhere but a loopback dev box.
+        const { host: c, code: qcode } = await (require('./helpers').newGameWithHost)(url);
         const answered = await new Promise(resolve => {
             const timer = setTimeout(() => resolve(null), 2000);
             c.socket.on('joinHost', (payload) => { clearTimeout(timer); resolve(payload); });
-            c.socket.emit('requestJoinHost');
+            c.socket.emit('requestJoinHost', { code: qcode });
         });
         t.check('the server answers requestJoinHost', answered !== null && 'lanHost' in answered,
             JSON.stringify(answered));

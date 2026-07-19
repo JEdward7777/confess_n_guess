@@ -57,15 +57,16 @@ not just compiled.
 - **Medium** — wrong but recoverable, or only hit in edge cases
 - **Low** — cleanup, dead code, hygiene
 
-## Build and run
+## Build and run (Cloudflare edition — see PORT.md)
 
-    npm run build          # client then server — MUST rebuild after editing src/
-    npm start              # server on :3001, serves the built client
+    npm start              # wrangler dev on :8787 (local Miniflare, no account needed)
+    npm run deploy         # build client + wrangler deploy (needs `npx wrangler login`)
 
-    cd confess_n_guess_client && npm run dev    # client with hot reload
+    cd confess_n_guess_client && npm run dev    # client with hot reload against :8787
 
-`dist/` is committed build output and `npm start` runs `dist/index.js` — **edits to
-`src/` have no effect until `npm run build_server`.** This has bitten before.
+The server is `worker/` (entry + GameDurableObject); shared game logic is `src/`
+(GameState, IncludeStuff), which wrangler bundles directly — no separate server build.
+The Node/socket.io version lives on branch `socketio`.
 
 ## Verification protocol
 
@@ -99,19 +100,19 @@ CNG-028). A walkthrough only guards what it waits for. When a test passes and yo
 to conclude something broader from it, check whether it could have failed.
 
 If you do need a server by hand: **confirm it actually bound the port** and that no
-earlier one is still holding it (`pgrep -af '[d]ist/index.js'`), or you will test a
-stale build and get a false result. Never use `pkill -f` with a pattern that appears in
-your own command line — it matches the shell and kills it. Both mistakes have cost real
-time here; `tests/server.js` avoids them by tracking the pid.
+earlier one is still holding it, or you will test a stale build and get a false result.
+Never use `pkill -f` with a pattern that appears in your own command line — it matches
+the shell and kills it. Both mistakes have cost real time here; `tests/server.js` avoids
+them by tracking the process group.
 
 ## Things to know about this codebase
 
-- **Game state must survive a server restart.** This is deliberate: it allows
-  hot-patching code mid-game while debugging without replaying a trace from the
-  start. `GameState.toJSON`/`fromJSON` must serialize *everything* a round needs, and
-  `SAVE_VERSION` must be bumped when old saves stop being readable.
-- `games.json` is runtime state written to the CWD. It is gitignored — that does not
-  stop it saving, it just keeps churn out of commits.
+- **Game state must survive a redeploy.** This is deliberate: it allows hot-patching
+  code mid-game without replaying a trace from the start. On Cloudflare that's DO
+  storage + durable alarms; `GameState.toJSON`/`fromJSON` must serialize *everything*
+  a round needs, `SAVE_VERSION` must be bumped when old saves stop being readable, and
+  **anything the DO caches in memory must be rehydrated in the constructor** — an
+  eviction is a restart you didn't schedule (CNG-042).
 - Identity is currently client-asserted: handlers trust the `name` in the event
   payload. This is the root cause of most reconnection bugs (CNG-009). Prefer fixes
   that move identity server-side.

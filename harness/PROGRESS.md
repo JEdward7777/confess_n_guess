@@ -725,3 +725,31 @@ harness like a proper engineering project.
   is why deploy is a documented user step rather than part of the port.
 
 Suite expectation during the port: red from M2 until M6, deliberately and visibly.
+
+---
+
+## 2026-07-18 — M1–M7: the port lands in a day
+
+**M1** scaffolded and booted. **M2** made GameState platform-pure (deadline timers,
+config injection, SAVE_VERSION 4) — and pulled the Node server's deletion forward from
+M7, since it couldn't compile against the new timer API and every commit must typecheck.
+**M3+M4** ported every handler and transition onto hibernation sockets and the
+three-duty alarm; first smoke test passed end to end on raw WebSockets. **M5** rewrote
+socket.js as a shim that keeps the socket.io surface so no screen changed. **M6**
+re-pointed the test harness at `wrangler dev`.
+
+**The suite earned its keep within minutes of running.** First full run: 8/14 green,
+6 failing with what looked like three unrelated bugs — a first-reply race, lost
+broadcasts, and restarts answering "Invalid game code". It was ONE bug (CNG-042): the
+rehydrate guard read `data.code`, which `toJSON()` never writes. wrangler dev's
+aggressive eviction meant any mid-test hibernation silently dropped the game, scattering
+the symptoms. One-line fix; all six tests green simultaneously. The M3 smoke could never
+have caught it — a warm process keeps the in-memory instance — which is exactly why D10
+made the full suite the acceptance bar and R2 named "hibernation surprises" in advance.
+
+**M7** teardown: express, socket.io, socket.io-client and 104 packages removed; only
+comments mention socket.io now. Test count is 14, not 15: idle-sweep's subjects (save
+files, shutdown signals) no longer exist as platform concepts; its live semantics moved
+into runtime-prune, where the alarm IS the sweep.
+
+Deploying is the user's step: `npx wrangler login`, then `npm run deploy`.

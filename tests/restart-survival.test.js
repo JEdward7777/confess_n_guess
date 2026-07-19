@@ -1,8 +1,9 @@
 // CNG-002: a server restart mid-round must not lose the round.
 //
-// This guards a workflow, not just a bug: the server gets restarted to pick up a code
+// This guards a workflow, not just a bug: the server gets redeployed to pick up a code
 // change *during a live game*, and that must not force replaying the round from the
-// start. If this test ever goes red, hot-patching a live game is broken.
+// start. On Cloudflare that's `wrangler deploy` restarting the DO; here it's wrangler
+// dev respawned against the same persist dir. If this goes red, hot-patching is broken.
 
 const { S, sleep, newGameWithHost, joinPlayers, everyoneAnswers, refresh, checker } = require('./helpers');
 
@@ -28,21 +29,10 @@ module.exports = {
 
         [host, ...Object.values(P)].forEach(c => c.close());
 
-        // SIGINT so the exit handler writes games.json, then bring it back.
+        // Kill wrangler and respawn against the same persist dir: Durable Object
+        // storage must carry the round across. (The Node version also inspected the
+        // save file here; DO storage is asserted over the wire instead.)
         await server.restart();
-
-        const saved = server.savedGames()[code];
-        t.check('the game was saved at all', !!saved);
-        if (saved) {
-            t.check('saved mid-round phase', saved.currentPhase === 'submittingLies', saved.currentPhase);
-            t.check('saved every answer',
-                names.every(n => saved.userAnswers && saved.userAnswers[n]),
-                Object.keys(saved.userAnswers || {}).join(','));
-            t.check('saved the lie that was already in',
-                !!(saved.lies && saved.lies[target] && saved.lies[target].some(l => l.username === liar)),
-                JSON.stringify(saved.lies || {}));
-            t.check('saved the lie target', saved.currentLieTargetPlayer === target, saved.currentLieTargetPlayer);
-        }
 
         // Everyone reconnects, as they would after the server came back.
         t.screenIs('host resumes the lie round', (await refresh(url, code, '<host>')).last, S.h2Timer);

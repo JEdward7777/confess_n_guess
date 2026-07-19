@@ -53,10 +53,15 @@ export class GameDurableObject extends DurableObject<Env> {
         // storage doesn't. An unreadable or version-mismatched blob means "no game" -
         // same SAVE_VERSION discipline as the Node version (CNG-002).
         ctx.blockConcurrencyWhile(async () => {
-            const data = await ctx.storage.get<{ code?: string }>('game');
-            if (data && typeof data.code === 'string') {
-                this.code = data.code;
-                this.gameState = GameState.fromJSON(data, data.code, this.gameConfig());
+            const data = await ctx.storage.get<any>('game');
+            // The code lives inside sharedState - toJSON has no top-level code field.
+            // The first draft read data.code, which doesn't exist, so rehydration
+            // silently never happened and every eviction or restart "lost" the game
+            // while its blob sat intact on disk (CNG-042).
+            const code = data?.sharedState?.code;
+            if (data && typeof code === 'string') {
+                this.code = code;
+                this.gameState = GameState.fromJSON(data, code, this.gameConfig());
             }
         });
     }

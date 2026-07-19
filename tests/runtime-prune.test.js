@@ -15,8 +15,9 @@ module.exports = {
     env: {
         CNG_ROUND_SECONDS: '1',
         CNG_RESTART_SECONDS: '1',
-        CNG_GAME_MAX_IDLE_MS: '2000',
-        CNG_SWEEP_INTERVAL_MS: '1000'
+        // The DO alarm IS the sweep (PORT.md D4): it fires at clean time exactly, no
+        // separate interval to configure.
+        CNG_CLEAN_TIME_MS: '2000'
     },
 
     async run({ url, server }) {

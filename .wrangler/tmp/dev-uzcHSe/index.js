@@ -493,9 +493,10 @@ var GameDurableObject = class extends DurableObject {
     this.code = "";
     ctx.blockConcurrencyWhile(async () => {
       const data = await ctx.storage.get("game");
-      if (data && typeof data.code === "string") {
-        this.code = data.code;
-        this.gameState = GameState.fromJSON(data, data.code, this.gameConfig());
+      const code = data?.sharedState?.code;
+      if (data && typeof code === "string") {
+        this.code = code;
+        this.gameState = GameState.fromJSON(data, code, this.gameConfig());
       }
     });
   }
