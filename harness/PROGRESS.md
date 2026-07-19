@@ -753,3 +753,25 @@ files, shutdown signals) no longer exist as platform concepts; its live semantic
 into runtime-prune, where the alarm IS the sweep.
 
 Deploying is the user's step: `npx wrangler login`, then `npm run deploy`.
+
+---
+
+## 2026-07-18 — Deployed. It's live.
+
+The user checked login (already authenticated, despite whoami showing read-only-looking
+scopes — the display was misleading) and said deploy. `npm run deploy` shipped it:
+
+    https://confess-n-guess.hootowl7777-cloud.workers.dev
+
+Verified with a real round against production over TLS websockets, using the same test
+helpers the suite uses: client served, game created, three players joined, questions
+dealt, lies submitted, votes resolved to the reveal. The throwaway game will be
+collected by its own 24-hour clean-time alarm — the sweep working as designed is also
+the cleanup plan for the verification.
+
+The QR code now just works: the hostname isn't loopback, so `window.location` is simply
+correct — the outcome CNG-029's narrow design was waiting for.
+
+From "flaky connection issues when someone refreshed" to a public URL on Cloudflare's
+free tier: 42 issues, 14 integration tests that judged their own port, two platforms,
+one harness.

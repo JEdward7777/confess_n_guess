@@ -122,5 +122,5 @@ tracked, not hidden. "Done" for the port = M6 acceptance.
 All milestones landed; the suite (the acceptance bar for M6) is green against
 `wrangler dev`. One issue found and fixed during the port: CNG-042 (rehydration read a
 field toJSON never wrote — R2's predicted class, found by exactly the tests D10 said
-would find it). Deploying remains the user's step: `npx wrangler login`, then
-`npm run deploy`.
+would find it). Deployed 2026-07-18: https://confess-n-guess.hootowl7777-cloud.workers.dev — verified
+by playing a real round against production.
