@@ -840,3 +840,30 @@ migration risk to their Zoho email not worth it. Correct trade; also costless: t
 redirect uses location.replace, so the host lands on workers.dev and the QR encodes it
 directly — no hop for scanning players. (An earlier claim here that scanners would
 bounce through the redirect was wrong and is retracted.)
+
+---
+
+## 2026-07-19 — First real playtest: the family loved it. Three fixes from the couch.
+
+The user played it with their family — the first real-world session, and the verdict was
+"awesome". Three pieces of feedback, all fixed and verified:
+
+1. **Reveal pacing tripled** (2s → 6s per stage, 12s per entry): the drumroll went by too
+   fast to savor. Verified behaviorally — at 4.5s the screen still reads "1 of 3
+   (answer)" where the old timing had already flipped the verdict. Timing budget checked:
+   8 players ≈ 96s of reveal + 60s host auto-continue still fits inside the 240s backstop.
+2. **Aliens decommissioned**: 👽 → 🦉 (an owl for the hootowl household), 👾 → 🌍.
+3. **The radar sweep** — the user's diagnosis from the couch was exactly right: one end
+   should pin at the center and the other should sweep the full circle. Root cause:
+   `transform-box: fill-box` rotates an element around its OWN bounding box, so the
+   needle orbited its own middle instead of the dial's. Changed sweep/orbit to
+   `transform-box: view-box` (all art shares a 120² viewBox with the pivot at center).
+   Verified with two screenshots 1.1s apart: needle anchored at center, different
+   quadrants. The same bug had silently kept G1's moon from ever orbiting its planet —
+   fixed by the same line, which says something about shared animation classes: one wrong
+   assumption, every user of the class inherits it.
+
+Playtest feedback beats any test in this file: it found the pacing (a taste issue no
+assertion covers) and the radar (a visual-correctness issue the static screenshots
+missed, because a broken rotation origin still looks plausible in a single frame — it
+took a human watching it MOVE).

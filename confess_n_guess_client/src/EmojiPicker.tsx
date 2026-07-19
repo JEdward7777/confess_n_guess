@@ -8,7 +8,7 @@ interface EmojiPickerProps {
 const EmojiPicker = ({ selectedEmoji, onSelectEmoji }: EmojiPickerProps) => {
   // Space-crew portraits to match the theme; the server stores whatever string it gets,
   // so a reclaimimg player with an old-style smiley keeps it.
-  const emojiList = ['🚀', '👽', '🛸', '🪐', '🌟', '🤖', '👾', '☄️', '🌙', '😎', '⚡', '🔭', '🧑‍🚀', '💫', '🌈'];
+  const emojiList = ['🚀', '🦉', '🛸', '🪐', '🌟', '🤖', '🌍', '☄️', '🌙', '😎', '⚡', '🔭', '🧑‍🚀', '💫', '🌈'];
 
   return (
     <div className="emoji-grid" role="listbox" aria-label="Pick your portrait">

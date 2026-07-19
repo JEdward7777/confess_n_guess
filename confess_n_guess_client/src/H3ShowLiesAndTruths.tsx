@@ -70,14 +70,15 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
     useEffect(() => {
         if (sortedAnswers.length === 0 || allDone) return;
 
-        // Stage 1: Show answer + voters (2 seconds)
+        // Stage 1: Show answer + voters. Family playtest verdict (2026-07-19): the
+        // reveal went by too fast to savor - tripled from 2s to 6s per stage.
         if (stage === 'answer') {
             const timer = setTimeout(() => {
                 setStage('reveal');
-            }, 2000);
+            }, 6000);
             return () => clearTimeout(timer);
         }
-        // Stage 2: Show Truth/Lie reveal (2 seconds), then move to next
+        // Stage 2: Show Truth/Lie reveal, then move to next
         else if (stage === 'reveal') {
             const timer = setTimeout(() => {
                 if (currentIndex < sortedAnswers.length - 1) {
@@ -88,7 +89,7 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                     // All done
                     setAllDone(true);
                 }
-            }, 2000);
+            }, 6000);
             return () => clearTimeout(timer);
         }
     }, [stage, currentIndex, sortedAnswers.length, allDone]);

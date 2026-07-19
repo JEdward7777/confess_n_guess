@@ -201,10 +201,15 @@ tr.lb-first td {
 @keyframes riser    { from { opacity: 0; transform: translateY(10px); }
                       to   { opacity: 1; transform: translateY(0); } }
 
-.anim-orbit  { animation: orbit 14s linear infinite; transform-origin: center; transform-box: fill-box; }
+/* orbit/sweep pivot on the CENTER OF THE DIAL, not the element's own bounding box:
+   fill-box made the radar stick rotate about itself (one end wandering, sweep stuck
+   looking one-quadrant) and kept G1's moon from ever actually orbiting. All these art
+   pieces share a 120x120 viewBox with the pivot at its center, so view-box + 50% is
+   correct for every one of them. */
+.anim-orbit  { animation: orbit 14s linear infinite; transform-origin: 50% 50%; transform-box: view-box; }
 .anim-float  { animation: floaty 5s ease-in-out infinite; }
 .anim-wave   { animation: wavering 2.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
-.anim-sweep  { animation: sweep 3.2s linear infinite; transform-origin: center; transform-box: fill-box; }
+.anim-sweep  { animation: sweep 3.2s linear infinite; transform-origin: 50% 50%; transform-box: view-box; }
 .anim-blink  { animation: blinker 1.6s ease-in-out infinite; }
 .rise-in     { animation: riser 0.35s ease-out; }
 
