@@ -16,6 +16,7 @@ import H2InformationScreenWithTimer from './H2InformationScreenWithTimer';
 import H3ShowLiesAndTruths from './H3ShowLiesAndTruths';
 import H5ShowPoints from './H5ShowPoints';
 import H6ShowWinner from './H6ShowWinner';
+import AnnouncerToggle from './AnnouncerToggle';
 
 function App() {
   // Check if we should show the new game screen or join with code
@@ -192,6 +193,7 @@ function App() {
   //show the correct screen based on the screen state.
   return (
     <div className="App">
+      {gameState.name === '<host>' && <AnnouncerToggle />}
       {screen === Screens.g1NewGame && <G1NewGamePage gameState={gameState} />}
       {screen === Screens.h1CollectingUsers && <H1CollectingUsersPage gameState={gameState} />}
       {screen === Screens.h2InformationScreenWithTimer && <H2InformationScreenWithTimer gameState={gameState} />}

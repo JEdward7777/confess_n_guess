@@ -260,3 +260,22 @@
   margin: 0.2em 0;
 }
 .winner-emoji { font-size: clamp(2.6rem, 12vw, 4rem); display: block; margin: 0.1em 0; }
+
+/* ---- the announcer's mute switch ----------------------------------------- */
+
+.announcer-toggle {
+  position: fixed;
+  top: 0.8rem;
+  right: 0.8rem;
+  z-index: 50;
+  min-height: 44px;
+  padding: 0.4em 0.7em;
+  font-size: 1.2rem;
+  line-height: 1;
+  border-radius: 999px;
+}
+.announcer-toggle.muted {
+  color: var(--ink-faint);
+  border-color: rgba(91, 106, 140, 0.5);
+  background: rgba(91, 106, 140, 0.08);
+}

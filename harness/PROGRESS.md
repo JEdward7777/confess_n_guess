@@ -867,3 +867,32 @@ Playtest feedback beats any test in this file: it found the pacing (a taste issu
 assertion covers) and the radar (a visual-correctness issue the static screenshots
 missed, because a broken rotation origin still looks plausible in a single frame — it
 took a human watching it MOVE).
+
+---
+
+## 2026-07-19 — The mission announcer (TTS), built under a deploy embargo
+
+New feature at the user's request, with an explicit constraint: **do not deploy until
+they give leave** (they're family-testing the previous deploy). Committed and pushed;
+embargo recorded at the top of TASKS.md so no session ships it by reflex.
+
+Design settled by two questions (asked one at a time per the user's instruction): full
+game-show announcer that reads every answer and verdict during the reveal — with variety
+as an explicit requirement, "so it doesn't get under your skin" — and a playful-tease
+personality: ribs players by name, never mean.
+
+Build: `announcer.ts` holds ten banks of ~10 phrase templates each (joins, truth round,
+lie round, voting, answer reading, truth/lie verdicts, the nobody-believed-the-truth
+sting, points, winner). Picks shuffle through a whole bank before any repeat, and a
+fresh shuffle never leads with the line that just played. Browser speechSynthesis (free,
+local, host-only); a corner mute toggle doubles as the user gesture that unlocks audio
+after a refresh. Wired into H1 (new joins only — a refresh doesn't replay the roster),
+H2 (phase lines parsed from the host text, keyed on phaseToken), H3 (reads each card,
+then the verdict; allDone re-renders are guarded against re-announcing), H5, H6 — all
+gated on isHost, because H3/H5/H6 also render on player phones.
+
+Verified without ears: stubbed speechSynthesis.speak in a headless host page and drove
+a full game around it. The captured transcript hit every moment in order — joins, truth
+round, lie round naming the target, voting, both reveal cards quoted verbatim, a lie
+busted with its author, a truth confirmed, points, winner — with no consecutive repeats,
+and a player page confirmed silent. 14/14 suite green.

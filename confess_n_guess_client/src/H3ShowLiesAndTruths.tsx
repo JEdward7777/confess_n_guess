@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import { ClientGameState } from './../../src/IncludeStuff';
 import { TruthScanner } from './SpaceArt';
+import { announcer } from './announcer';
 
 interface H3ShowLiesAndTruthsProps {
     gameState: ClientGameState
@@ -120,6 +121,24 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
     // Get current answer - with safe defaults
     const currentAnswer = sortedAnswers[currentIndex] ?? null;
+
+    // The full-announcer reveal (user-chosen): read each answer as its card appears,
+    // then call the verdict. Host only - this screen also renders on player phones.
+    // allDone re-renders the same last card, so it must not re-announce.
+    useEffect(() => {
+        if (!isHost || !currentAnswer || allDone) return;
+        if (stage === 'answer') {
+            announcer.announce('revealAnswer', { answer: `"${currentAnswer.answer}"` }, { interrupt: true });
+        } else {
+            const noVotes = Array.isArray(currentAnswer.voters) && currentAnswer.voters.length === 0;
+            if (currentAnswer.isTruth) {
+                announcer.announce(noVotes ? 'verdictTruthNobody' : 'verdictTruth',
+                    { target: currentAnswer.username }, { interrupt: true });
+            } else {
+                announcer.announce('verdictLie', { author: currentAnswer.username }, { interrupt: true });
+            }
+        }
+    }, [currentIndex, stage, allDone, isHost]);
     // Safely get voters array - ensure it's an array
     const voters = (currentAnswer && Array.isArray(currentAnswer.voters)) ? currentAnswer.voters : [];
 

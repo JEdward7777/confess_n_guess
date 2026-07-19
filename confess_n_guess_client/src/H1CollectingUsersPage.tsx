@@ -8,6 +8,7 @@ import {socket} from './socket';
 import {ClientGameState, buildJoinUrl, isLoopbackHostname} from './../../src/IncludeStuff';
 import { QRCodeSVG } from 'qrcode.react';
 import { OrbitalRelay } from './SpaceArt';
+import { announcer } from './announcer';
 
 interface H1CollectingUsersPageProps {
     gameState: ClientGameState,
@@ -44,6 +45,25 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
     // If we're on loopback and the server had no LAN address to offer, the QR is a dud and
     // saying so beats letting people scan it and wonder.
     const qrIsUnreachable = isLoopbackHostname(new URL(joinUrl || window.location.href).hostname);
+
+    // Announce each NEW arrival. The ref starts as the roster present at mount, so a
+    // host refresh mid-lobby doesn't replay every join at once.
+    const knownRef = React.useRef<Set<string> | null>(null);
+    const rosterNames = Object.values(gameState?.sharedState?.users ?? {})
+        .filter(u => u.name !== '<host>').map(u => u.name);
+    useEffect(() => {
+        if (gameState.name !== '<host>') return;
+        if (knownRef.current === null) {
+            knownRef.current = new Set(rosterNames);
+            return;
+        }
+        for (const name of rosterNames) {
+            if (!knownRef.current.has(name)) {
+                knownRef.current.add(name);
+                announcer.announce('lobbyJoin', { name });
+            }
+        }
+    }, [rosterNames.join('|')]);
 
     const startGame = () => {
         socket.emit( "startGame", {code:gameState?.sharedState?.code} );

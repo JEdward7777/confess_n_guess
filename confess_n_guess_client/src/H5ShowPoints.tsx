@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import { ClientGameState, LeaderboardEntry } from './../../src/IncludeStuff';
 import { ScoreConstellation } from './SpaceArt';
+import { announcer } from './announcer';
 
 interface H5ShowPointsProps {
     gameState: ClientGameState
@@ -51,6 +52,15 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
 
     const leaderboard = gameState.leaderboard ?? [];
     const text = gameState.text ?? "Points for this round";
+
+    // One line on arrival, naming the leader. The screen remounts per round.
+    useEffect(() => {
+        if (!isHost || leaderboard.length === 0) return;
+        announcer.announce('points',
+            { leader: leaderboard[0].name, points: String(leaderboard[0].points) },
+            { interrupt: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="screen host-screen rise-in">

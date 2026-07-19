@@ -5,6 +5,7 @@ import React, {useEffect, useState, useRef} from 'react';
 
 import {ClientGameState} from './../../src/IncludeStuff';
 import { RadarRing } from './SpaceArt';
+import { announcer } from './announcer';
 
 interface H2InformationScreenWithTimerProps {
     gameState: ClientGameState
@@ -47,6 +48,21 @@ const H2InformationScreenWithTimer = ({gameState}: H2InformationScreenWithTimerP
     }, [count, gameState?.sharedState?.code, gameState?.phaseToken]);
 
     const text = gameState.text ?? "Please wait...";
+
+    // One line when a new timed segment begins. phaseToken is exactly that signal;
+    // the moment is inferred from the host text, which carries the target's name.
+    useEffect(() => {
+        if (gameState.name !== '<host>') return;
+        const lieMatch = text.match(/submitting lies for (.+?)!/i);
+        const voteMatch = text.match(/voting on lies for (.+?)!/i);
+        if (lieMatch) {
+            announcer.announce('lieRoundStart', { target: lieMatch[1] }, { interrupt: true });
+        } else if (voteMatch) {
+            announcer.announce('votingStart', { target: voteMatch[1] }, { interrupt: true });
+        } else if (/truthfully/i.test(text)) {
+            announcer.announce('truthRoundStart', {}, { interrupt: true });
+        }
+    }, [gameState.phaseToken]);
 
     return (
         <div className="screen host-screen rise-in">

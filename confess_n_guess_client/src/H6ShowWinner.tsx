@@ -3,8 +3,10 @@ import { socket } from './socket';
 
 import React from 'react';
 
+import { useEffect } from 'react';
 import { ClientGameState, LeaderboardEntry } from './../../src/IncludeStuff';
 import { ChampionPlanet } from './SpaceArt';
+import { announcer } from './announcer';
 
 interface H6ShowWinnerProps {
     gameState: ClientGameState
@@ -21,6 +23,14 @@ const H6ShowWinner = ({ gameState }: H6ShowWinnerProps) => {
     const leaderboard = gameState.leaderboard ?? [];
     const text = gameState.text ?? "Game Over!";
     const winner = leaderboard.length > 0 ? leaderboard[0] : null;
+
+    // The grand finale, once. Host only - players see this screen too.
+    useEffect(() => {
+        if (gameState.name !== '<host>' || !winner) return;
+        announcer.announce('winner',
+            { name: winner.name, points: String(winner.points) }, { interrupt: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="screen host-screen rise-in">
