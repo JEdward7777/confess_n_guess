@@ -4,7 +4,7 @@ import { socket } from './socket';
 import React, { useState, useEffect, useRef } from 'react';
 
 import { ClientGameState } from './../../src/IncludeStuff';
-
+import { TruthScanner } from './SpaceArt';
 
 interface H3ShowLiesAndTruthsProps {
     gameState: ClientGameState
@@ -12,9 +12,9 @@ interface H3ShowLiesAndTruthsProps {
 
 // Type guard to check if an answer object has required properties
 function isValidAnswer(answer: any): answer is { username: string; answer: string; isTruth: boolean; voters?: string[] } {
-    return answer && typeof answer === 'object' && 
-           typeof answer.username === 'string' && 
-           typeof answer.answer === 'string' && 
+    return answer && typeof answer === 'object' &&
+           typeof answer.username === 'string' &&
+           typeof answer.answer === 'string' &&
            typeof answer.isTruth === 'boolean';
 }
 
@@ -121,79 +121,35 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
     const currentAnswer = sortedAnswers[currentIndex] ?? null;
     // Safely get voters array - ensure it's an array
     const voters = (currentAnswer && Array.isArray(currentAnswer.voters)) ? currentAnswer.voters : [];
-    
+
     // Safe accessors for currentAnswer properties
     const currentIsTruth = currentAnswer?.isTruth ?? false;
     const currentAnswerText = currentAnswer?.answer ?? '';
     const currentUsername = currentAnswer?.username ?? 'Unknown';
 
-    // Dark theme styles - use inline styles to bypass App constraints
     return (
-        <div style={{
-            backgroundColor: '#1a1a1a',
-            minHeight: '100vh',
-            color: '#fff',
-            padding: '20px',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0
-        }}>
-            <h1 style={{ color: '#fff' }}>{allDone ? "Truth Revealed!" : "Drumroll..."}</h1>
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px', color: '#ccc' }}>{text}</div>
+        <div className="screen host-screen">
+            <TruthScanner />
+            <p className="tagline">signal decryption</p>
+            <h1 className={allDone ? 'glow-cyan' : ''}>{allDone ? 'Truth Revealed' : 'Scanning…'}</h1>
+            <p className="hint-text" style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
 
             {/* Show the final truth entry when all done, otherwise show current entry */}
             {currentAnswer && (
-                <div style={{
-                    margin: '10px',
-                    padding: '20px',
-                    border: currentIsTruth ? '3px solid #4CAF50' : '2px solid #555',
-                    borderRadius: '10px',
-                    backgroundColor: currentIsTruth ? '#1e3a1e' : '#2d2d2d',
-                    transition: 'all 0.3s ease'
-                }}>
+                <div key={`${currentIndex}-${stage}-${allDone}`} className={'reveal-card' + ((allDone || stage === 'reveal') && currentIsTruth ? ' is-truth' : '')}>
                     {/* When all done, always show the reveal stage (truth/lie + submitter) */}
                     {(allDone || stage === 'reveal') && (
                         <>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                                {currentIsTruth && (
-                                    <span style={{
-                                        color: '#1a1a1a',
-                                        fontWeight: 'bold',
-                                        backgroundColor: '#4CAF50',
-                                        padding: '4px 12px',
-                                        borderRadius: '15px'
-                                    }}>
-                                        ✓ TRUTH
-                                    </span>
-                                )}
-                                {!currentIsTruth && (
-                                    <span style={{
-                                        color: '#1a1a1a',
-                                        fontWeight: 'bold',
-                                        backgroundColor: '#888',
-                                        padding: '4px 12px',
-                                        borderRadius: '15px'
-                                    }}>
-                                        💨 LIE
-                                    </span>
-                                )}
-                            </div>
-                            <p style={{ fontSize: '24px', margin: '10px 0', color: '#fff', fontWeight: 'bold' }}>
-                                {currentAnswerText}
-                            </p>
-                            <div style={{ marginTop: '10px', fontSize: '14px', color: '#ccc' }}>
-                                Submitted by: {currentUsername}
-                            </div>
+                            {currentIsTruth
+                                ? <span className="verdict truth">✓ Truth</span>
+                                : <span className="verdict lie">✕ Lie</span>}
+                            <p className="reveal-answer">{currentAnswerText}</p>
+                            <div className="reveal-by">Submitted by: {currentUsername}</div>
                             {hasVoters && voters.length > 0 && (
-                                <div style={{ marginTop: '5px', fontSize: '14px', color: '#ccc' }}>
-                                    Voted by: {voters.join(', ')}
-                                </div>
+                                <div className="reveal-votes">Voted by: {voters.join(', ')}</div>
                             )}
                             {hasVoters && voters.length === 0 && currentIsTruth && (
-                                <div style={{ marginTop: '10px', fontSize: '16px', color: '#e74c3c' }}>
-                                    No one guessed the truth!
-                                </div>
+                                <div className="reveal-nobody">No one guessed the truth!</div>
                             )}
                         </>
                     )}
@@ -201,18 +157,12 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
                     {/* Stage 1: Show answer + voters (only when not all done and in answer stage) */}
                     {!allDone && stage === 'answer' && (
                         <>
-                            <p style={{ fontSize: '24px', margin: '10px 0', color: '#fff', fontWeight: 'bold' }}>
-                                {currentAnswerText}
-                            </p>
+                            <p className="reveal-answer">{currentAnswerText}</p>
                             {hasVoters && voters.length > 0 && (
-                                <div style={{ marginTop: '10px', fontSize: '16px', color: '#ccc' }}>
-                                    Voted by: {voters.join(', ')}
-                                </div>
+                                <div className="reveal-votes">Voted by: {voters.join(', ')}</div>
                             )}
                             {hasVoters && voters.length === 0 && (
-                                <div style={{ marginTop: '10px', fontSize: '16px', color: '#888' }}>
-                                    No votes
-                                </div>
+                                <div className="reveal-votes">No votes</div>
                             )}
                         </>
                     )}
@@ -221,35 +171,22 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
             {/* Show message if no valid answers */}
             {!currentAnswer && !allDone && (
-                <div style={{ padding: '20px', color: '#888', textAlign: 'center' }}>
-                    <p>Waiting for results...</p>
+                <div className="panel" style={{ marginTop: '1rem' }}>
+                    <p className="hint-text">Waiting for results...</p>
                 </div>
             )}
 
             {!allDone && (
-                <p style={{ fontSize: '14px', color: '#888', marginTop: '20px' }}>
+                <p className="faint-text" style={{ marginTop: '1rem' }}>
                     {currentIndex + 1} of {sortedAnswers.length} {stage === 'answer' ? '(answer)' : '(revealed)'}
                 </p>
             )}
 
             {isHost && allDone && (
-                <div style={{ marginTop: '30px', textAlign: 'center' }}>
-                    <button
-                        onClick={handleContinue}
-                        style={{
-                            padding: '15px 30px',
-                            fontSize: '18px',
-                            backgroundColor: '#2196F3',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        Continue
-                    </button>
+                <div style={{ marginTop: '1.4rem' }}>
+                    <button onClick={handleContinue}>Continue</button>
                     {countdown !== null && (
-                        <p style={{ marginTop: '10px', color: '#888', fontSize: '14px' }}>
+                        <p className="faint-text" style={{ marginTop: '0.6rem' }}>
                             Auto-continue in {countdown} seconds
                         </p>
                     )}

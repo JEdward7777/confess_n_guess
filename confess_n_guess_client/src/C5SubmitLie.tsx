@@ -4,7 +4,7 @@ import {socket} from './socket';
 import React, {useState, useEffect} from 'react';
 
 import {ClientGameState} from './../../src/IncludeStuff';
-
+import { CloakedShip } from './SpaceArt';
 
 interface C5SubmitLieProps {
     gameState: ClientGameState
@@ -18,7 +18,7 @@ const C5SubmitLie = ({gameState}: C5SubmitLieProps) => {
 
     useEffect(() => {
         setLie("");
-        
+
         if (gameState.question) {
             setStoredQuestion(gameState.question);
         } else if (gameState.text) {
@@ -29,7 +29,7 @@ const C5SubmitLie = ({gameState}: C5SubmitLieProps) => {
                 setStoredQuestion(gameState.text);
             }
         }
-        
+
         if (gameState.targetPlayer) {
             setTargetPlayer(gameState.targetPlayer);
         }
@@ -39,46 +39,43 @@ const C5SubmitLie = ({gameState}: C5SubmitLieProps) => {
         if (!lie.trim()) {
             return;
         }
-        
+
         socket.emit("submitLie", {
-            name: gameState?.name, 
-            code: gameState?.sharedState?.code ?? "", 
+            name: gameState?.name,
+            code: gameState?.sharedState?.code ?? "",
             lie: lie,
             targetPlayer: targetPlayer,
             question: storedQuestion
         });
     }
 
-    const error = gameState.error ?? ""; 
+    const error = gameState.error ?? "";
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && lie.trim()) {
             submitLie();
         }
     };
-    
+
     return (
-        <div>
-            <h1 style={{ fontSize: '1.5rem' }}>{gameState.instructionText || `Write a fooling answer for this question about ${targetPlayer}`}</h1>
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px' }}>
-                {storedQuestion}
+        <div className="screen rise-in">
+            <CloakedShip />
+            <p className="tagline">cloaked transmission</p>
+            <h1>{gameState.instructionText || `Write a fooling answer for this question about ${targetPlayer}`}</h1>
+            <div className="prompt-panel lie-panel">{storedQuestion}</div>
+            <div className="stack">
+                <input
+                    type="text"
+                    value={lie}
+                    onChange={(e) => setLie(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Fabricate something believable…"
+                />
+                <button className="btn-magenta" onClick={submitLie} disabled={!lie.trim()}>
+                    Deploy the Lie
+                </button>
             </div>
-            <input 
-                type="text" 
-                value={lie} 
-                onChange={(e) => setLie(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your fooling answer here..."
-                style={{ padding: '10px', fontSize: '16px', width: '300px' }}
-            />
-            <button 
-                onClick={submitLie}
-                disabled={!lie.trim()}
-                style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px' }}
-            >
-                Submit Lie
-            </button>
-            {error && <p>{error}</p>}
+            {error && <p className="error-text">{error}</p>}
         </div>
     );
 }

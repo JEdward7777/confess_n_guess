@@ -1,29 +1,24 @@
-
 import React from 'react';
 
-//Add the type declarations.
 interface EmojiPickerProps {
   selectedEmoji: string;
   onSelectEmoji: (emoji: string) => void;
 }
 
 const EmojiPicker = ({ selectedEmoji, onSelectEmoji }: EmojiPickerProps) => {
-  const emojiList = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇']; // Add more emojis as needed
+  // Space-crew portraits to match the theme; the server stores whatever string it gets,
+  // so a reclaimimg player with an old-style smiley keeps it.
+  const emojiList = ['🚀', '👽', '🛸', '🪐', '🌟', '🤖', '👾', '☄️', '🌙', '😎', '⚡', '🔭', '🧑‍🚀', '💫', '🌈'];
 
   return (
-    <div>
+    <div className="emoji-grid" role="listbox" aria-label="Pick your portrait">
       {emojiList.map((emoji, index) => (
         <span
           key={index}
+          role="option"
+          aria-selected={selectedEmoji === emoji}
           onClick={() => onSelectEmoji(emoji)}
-          style={{
-            fontSize: '24px',
-            cursor: 'pointer',
-            marginRight: '5px',
-            border: selectedEmoji === emoji ? '2px solid blue' : 'none',
-            padding: '5px',
-            borderRadius: '5px',
-          }}
+          className={'emoji-cell' + (selectedEmoji === emoji ? ' selected' : '')}
         >
           {emoji}
         </span>

@@ -4,7 +4,7 @@ import { socket } from './socket';
 import React from 'react';
 
 import { ClientGameState, LeaderboardEntry } from './../../src/IncludeStuff';
-
+import { ChampionPlanet } from './SpaceArt';
 
 interface H6ShowWinnerProps {
     gameState: ClientGameState
@@ -23,72 +23,45 @@ const H6ShowWinner = ({ gameState }: H6ShowWinnerProps) => {
     const winner = leaderboard.length > 0 ? leaderboard[0] : null;
 
     return (
-        <div style={{ backgroundColor: '#1a1a1a', minHeight: '100vh', color: '#fff', padding: '20px' }}>
-            <h1 style={{ color: '#fff' }}>🎉 Game Over! 🎉</h1>
-            <div style={{ whiteSpace: 'pre-wrap', color: '#ccc' }}>{text}</div>
-            
+        <div className="screen host-screen rise-in">
+            <ChampionPlanet />
+            <p className="tagline">mission complete</p>
+            <h1 className="glow-gold">Game Over</h1>
+            <p className="hint-text" style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+
             {winner && (
-                <div style={{ 
-                    marginTop: '30px', 
-                    padding: '30px', 
-                    backgroundColor: '#2d2d2d',
-                    borderRadius: '10px',
-                    textAlign: 'center'
-                }}>
-                    <h2 style={{ fontSize: '36px', marginBottom: '10px', color: '#fff' }}>🏆 Winner 🏆</h2>
-                    <p style={{ fontSize: '48px', margin: '10px 0' }}>{winner.emoji}</p>
-                    <p style={{ fontSize: '32px', fontWeight: 'bold', color: '#fff' }}>{winner.name}</p>
-                    <p style={{ fontSize: '24px', color: '#ccc' }}>Total Points: {winner.points}</p>
+                <div className="panel" style={{ maxWidth: '24rem', margin: '1rem auto 0', borderColor: 'rgba(251, 191, 36, 0.5)', boxShadow: '0 0 30px rgba(251, 191, 36, 0.18)' }}>
+                    <p className="tagline" style={{ color: 'var(--gold)' }}>champion of the void</p>
+                    <span className="winner-emoji">{winner.emoji}</span>
+                    <p className="winner-name">{winner.name}</p>
+                    <p className="hint-text">Total Points: <strong style={{ color: 'var(--ink)' }}>{winner.points}</strong></p>
                 </div>
             )}
-            
-            <div style={{ marginTop: '30px' }}>
-                <h2 style={{ color: '#fff' }}>Final Standings</h2>
-                <table style={{ width: '100%', maxWidth: '400px', borderCollapse: 'collapse' }}>
+
+            <div className="panel" style={{ maxWidth: '28rem', margin: '1.2rem auto 0' }}>
+                <h2 style={{ marginTop: 0 }}>Final Standings</h2>
+                <table>
                     <thead>
-                        <tr style={{ backgroundColor: '#333' }}>
-                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Rank</th>
-                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Player</th>
-                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Points</th>
+                        <tr>
+                            <th style={{ textAlign: 'center' }}>Rank</th>
+                            <th>Player</th>
+                            <th style={{ textAlign: 'right' }}>Points</th>
                         </tr>
                     </thead>
                     <tbody>
                         {leaderboard.map((entry: LeaderboardEntry, index: number) => (
-                            <tr key={entry.name} style={{ 
-                                backgroundColor: index === 0 ? '#2d2d2d' : '#1a1a1a',
-                                color: '#fff',
-                                fontWeight: index === 0 ? 'bold' : 'normal'
-                            }}>
-                                <td style={{ padding: '10px', border: '1px solid #555', textAlign: 'center', color: '#fff' }}>
-                                    {index + 1}
-                                </td>
-                                <td style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>
-                                    {entry.emoji} {entry.name}
-                                </td>
-                                <td style={{ padding: '10px', border: '1px solid #555', textAlign: 'center', color: '#fff' }}>
-                                    {entry.points}
-                                </td>
+                            <tr key={entry.name} className={index === 0 ? 'lb-first' : ''}>
+                                <td style={{ textAlign: 'center' }}>{index + 1}</td>
+                                <td>{entry.emoji} {entry.name}</td>
+                                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{entry.points}</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
 
-            <div style={{ marginTop: '30px', textAlign: 'center' }}>
-                <button 
-                    onClick={handleNewGame}
-                    style={{ 
-                        padding: '15px 30px', 
-                        fontSize: '18px',
-                        backgroundColor: '#4CAF50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    Start New Game
-                </button>
+            <div style={{ marginTop: '1.4rem' }}>
+                <button onClick={handleNewGame}>Start New Game</button>
             </div>
         </div>
     );

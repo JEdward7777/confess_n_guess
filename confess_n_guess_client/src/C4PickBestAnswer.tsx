@@ -4,7 +4,7 @@ import { socket } from './socket';
 import React from 'react';
 
 import { ClientGameState, UserAnswer } from './../../src/IncludeStuff';
-
+import { SignalPicker } from './SpaceArt';
 
 interface C4PickBestAnswerProps {
     gameState: ClientGameState
@@ -15,9 +15,9 @@ const C4PickBestAnswer = ({ gameState }: C4PickBestAnswerProps) => {
     const handleSelectAnswer = (username: string) => {
         // Send vote - targetPlayer comes from sharedState or we need to track it
         const targetPlayer = (gameState as any).targetPlayer || '';
-        socket.emit('voteOnLie', { 
+        socket.emit('voteOnLie', {
             name: gameState?.name,
-            code: gameState?.sharedState?.code ?? "", 
+            code: gameState?.sharedState?.code ?? "",
             selectedUsername: username,
             targetPlayer: targetPlayer
         });
@@ -31,25 +31,26 @@ const C4PickBestAnswer = ({ gameState }: C4PickBestAnswerProps) => {
     const filteredAnswers = answers.filter((answer: UserAnswer) => answer.username !== currentPlayerName);
 
     return (
-        <div>
-            <h1>Which one is the TRUTH?</h1>
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px' }}>{text}</div>
+        <div className="screen rise-in">
+            <SignalPicker />
+            <p className="tagline">signal analysis</p>
+            <h1>Find the true signal</h1>
+            <p className="hint-text" style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
             {filteredAnswers.length === 0 ? (
-                <p>No answers available for voting.</p>
+                <p className="hint-text">No answers available for voting.</p>
             ) : (
-            <div>
-                {filteredAnswers.map((answer: UserAnswer) => (
-                    <div key={answer.username} style={{ margin: '10px', padding: '15px', border: '2px solid #444', borderRadius: '8px' }}>
-                        <p style={{ fontSize: '18px' }}>{answer.answer}</p>
-                        <button 
+                <div className="stack" style={{ marginTop: '0.6rem' }}>
+                    {filteredAnswers.map((answer: UserAnswer) => (
+                        <button
+                            key={answer.username}
+                            className="ballot-card"
                             onClick={() => handleSelectAnswer(answer.username)}
-                            style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
                         >
-                            Select as Truth
+                            <span>{answer.answer}</span>
+                            <span className="pick">lock on ▸</span>
                         </button>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
             )}
         </div>
     );

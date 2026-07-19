@@ -1,25 +1,17 @@
 //generate a react page which shows a list of the current users and a button which says start.
-//have the component take a single parameter which includes in it the list of user objects which include the name of the user.
 
 import React, { useEffect, useState } from 'react';
 
 //@ts-ignore
 import {socket} from './socket';
 
-//import React from 'react';
 import {ClientGameState, buildJoinUrl, isLoopbackHostname} from './../../src/IncludeStuff';
 import { QRCodeSVG } from 'qrcode.react';
-
-//Single argument of game state.
-
-//declare the types of teh arguments to include one arg of type GameState.
+import { OrbitalRelay } from './SpaceArt';
 
 interface H1CollectingUsersPageProps {
     gameState: ClientGameState,
 }
-
-
-//show a code for people to join in bright snazzy font.
 
 const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
 
@@ -38,7 +30,7 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
             setLanHost(lanHost);
         }
         socket.on('joinHost', onJoinHost);
-        socket.emit('requestJoinHost');
+        socket.emit('requestJoinHost', { code: gameState?.sharedState?.code });
         return () => socket.off('joinHost', onJoinHost);
     }, []);
 
@@ -62,44 +54,56 @@ const H1CollectingUsersPage = ({gameState}: H1CollectingUsersPageProps) => {
     const canStart = users.length >= 2;
 
     return (
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-            <h1>Collecting Users</h1>
-            <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#4CAF50' }}>Code: {gameState?.sharedState?.code ?? "no_code"}</p>
-            
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: '40px', flexWrap: 'wrap' }}>
+        <div className="screen host-screen rise-in">
+            <OrbitalRelay />
+            <p className="tagline">assembling the crew</p>
+            <h1>Boarding Call</h1>
+            <p className="hint-text" style={{ margin: 0 }}>Scan or enter the code:</p>
+            <p className="lobby-code">{gameState?.sharedState?.code ?? "—"}</p>
+
+            <div className="lobby-grid">
                 {joinUrl && (
-                    <div style={{ backgroundColor: 'white', padding: '15px', borderRadius: '10px' }}>
+                    <div className="qr-pad">
                         <QRCodeSVG value={joinUrl} size={200} includeMargin={true} />
-                        <p style={{ marginTop: '10px', fontSize: '14px', color: '#666', backgroundColor: 'white' }}>Scan to join</p>
+                        <p className="qr-caption">Scan to join</p>
                         {/* Show the URL: it's what makes a wrong guess visible, and it's
                             readable out loud when someone's camera won't cooperate. */}
-                        <p style={{ margin: 0, fontSize: '11px', color: '#999', backgroundColor: 'white', wordBreak: 'break-all', maxWidth: '200px' }}>
-                            {joinUrl}
-                        </p>
+                        <p className="qr-url">{joinUrl}</p>
                         {qrIsUnreachable && (
-                            <p style={{ marginTop: '8px', fontSize: '11px', color: '#c00', backgroundColor: 'white', maxWidth: '200px' }}>
+                            <p className="qr-warning">
                                 This address only works on this machine. Open the host page
                                 using this computer's network address so phones can join.
                             </p>
                         )}
                     </div>
                 )}
-                
+
                 <div>
-                    <ul style={{ textAlign: 'left', listStyle: 'none', padding: 0 }}>
-                        {users.map((user, index) => <li key={index} style={{ padding: '5px', fontSize: '18px' }}>{user.emoji} {user.name}</li>)}
+                    <ul className="crew-list">
+                        {users.length === 0 && (
+                            <li className="hint-text">
+                                <span className="crew-emoji anim-blink">📡</span> Listening for crew…
+                            </li>
+                        )}
+                        {users.map((user, index) => (
+                            <li key={index}>
+                                <span className="crew-emoji">{user.emoji}</span> {user.name}
+                            </li>
+                        ))}
                     </ul>
                 </div>
             </div>
-            <br />
-            <button onClick={startGame} disabled={!canStart}>Start</button>
-            {!canStart && <p style={{ color: '#ff6b6b', marginTop: '10px' }}>Need at least 2 players to start</p>}
-            {/* Whatever the server wants the host to know - previously sent but never
-                shown (CNG-041). The lobby-bound emits clear this field explicitly, so a
-                message left over from mid-game can't leak in via the client merge. */}
-            {gameState.text && (
-                <p style={{ color: '#ff9800', marginTop: '10px', fontWeight: 'bold' }}>{gameState.text}</p>
-            )}
+
+            <div style={{ marginTop: '1.2rem' }}>
+                <button onClick={startGame} disabled={!canStart}>Launch Mission</button>
+                {!canStart && <p className="hint-text" style={{ marginTop: '0.6rem' }}>Need at least 2 players to start</p>}
+                {/* Whatever the server wants the host to know - previously sent but never
+                    shown (CNG-041). The lobby-bound emits clear this field explicitly, so a
+                    message left over from mid-game can't leak in via the client merge. */}
+                {gameState.text && (
+                    <p className="error-text" style={{ marginTop: '0.6rem' }}>{gameState.text}</p>
+                )}
+            </div>
         </div>
     );
 }

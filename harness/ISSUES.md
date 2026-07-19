@@ -50,6 +50,7 @@ checking library source or on-disk data) — none are speculative unless marked
 | [CNG-040](#cng-040) | Low | **Fixed** | Resync reshuffles the ballot, so a refreshing voter sees the options in a new order |
 | [CNG-041](#cng-041) | Low | **Fixed** | Client nits: dead H4 screen, H1 never renders server text, stale-merge trap notes |
 | [CNG-042](#cng-042) | High | **Fixed** | DO rehydration read a field toJSON never wrote, so every eviction "lost" the game |
+| [CNG-043](#cng-043) | High | **Fixed** | Shim/App identify deadlock: a refreshing player never resynced in the real browser |
 | [CNG-024](#cng-024) | High | **Fixed** | Lie target is handed a ballot for their own round on resync |
 
 ---
@@ -1370,3 +1371,28 @@ Two things worth keeping from this one:
   like a first-reply race, a lost broadcast, and a restart-persistence failure all at
   once. Fixing the one field turned all six tests green simultaneously. Risk R2 in
   PORT.md ("hibernation surprises") named this class in advance.
+
+---
+
+### CNG-043
+**Shim/App identify deadlock: a refreshing player never resynced in the real browser**
+High · **Fixed 2026-07-19** · `confess_n_guess_client/src/App.tsx`, `src/socket.js`
+
+Found by *screenshotting* the themed screens, not by any test. `App.tsx` identified only
+once the socket was connected (`if (socket.connected) identify()` + a `connect`
+listener); the M5 shim only connects when something emits. Nothing emitted → nothing
+connected → a player refreshing mid-game sat on the C1 name screen forever. The whole
+CNG-005 refresh story was broken in the real browser since M5 landed.
+
+**The suite could never see it**: the test helper is its own mini-shim that emits
+eagerly, so every reconnect test passed while the production client deadlocked. This is
+R3 from PORT.md one layer deeper than predicted — the risk note said "the shim must
+re-fire connect so App re-identifies", and the actual failure was that the *first*
+identify never happened.
+
+Fix: App identifies unconditionally on mount — with a lazy-connecting shim, the identify
+emit is precisely what opens the connection. The `connect` listener stays for reconnects.
+
+Lesson banked in the harness: a protocol-level suite validates the server and the
+*test's* client. Only driving the production client (screenshots, or a browser-driven
+test) validates the shipped one.

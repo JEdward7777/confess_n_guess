@@ -775,3 +775,52 @@ correct — the outcome CNG-029's narrow design was waiting for.
 From "flaky connection issues when someone refreshed" to a public URL on Cloudflare's
 free tier: 42 issues, 14 integration tests that judged their own port, two platforms,
 one harness.
+
+---
+
+## 2026-07-19 — The space-techno theme, verified by actually looking (CNG-043 found)
+
+The user asked for a space-techno theme with vector art per page, mobile-first without
+being stupid on desktop. Built as one system: "deep signal" — void-navy starfield (pure
+CSS gradients + an inline-SVG star tile, zero requests), neon cyan/magenta/violet on
+stroke-based line art, Orbitron/Exo 2 type, glow used sparingly. Twelve SVG pieces in
+SpaceArt.tsx, one per screen role (ringed planet, orbital relay, radar timer ring, truth
+scanner, constellation, crowned planet, helmet badge with the chosen emoji in the visor,
+drifting astronaut, truth beacon, cloaked ship, signal picker). All eleven screens
+re-skinned with logic untouched; player screens are a thumb column, host screens widen
+at 760px.
+
+**"Look at each page" was taken literally.** /usr/bin/google-chrome exists, so the pages
+were screenshotted headlessly: wrangler dev with hour-long timers, seven games parked one
+per phase, puppeteer-core driving real viewports (390x844 phone, 1280x800 TV), thirteen
+screenshots read back as images. The looking earned its keep four times:
+
+1. **CNG-043** — the shim/App identify deadlock. A refreshing player never resynced in
+   the real browser; the entire suite stayed green because the test helper emits eagerly.
+   Screens don't lie.
+2. The helmet visor emoji was invisible (SVG root fill="none" inherited by <text>).
+3. Desktop-centered tall screens clipped the lobby's Launch button below the fold —
+   fixed by compressing host-screen headers at desktop after `safe center` measurably
+   changed nothing (overflow means safe center == start).
+4. The first camera was lying: --virtual-time-budget freezes real time so websockets
+   never resync, and window-size clipping cropped layouts. Screenshot tooling has to be
+   verified like any other test.
+
+Also bitten a THIRD time by an orphaned server (workerd child survived killing its npx
+parent) — the hand-rolled shot server skipped tests/server.js's process-group
+discipline. The rule exists; use it.
+
+Suite green after; deployed and production-screenshotted.
+
+**Post-theme flake hunt.** Two suite runs after the theme flaked in a new way: cold DOs
+under load answer slower than the tests' fixed sleeps, so assertions read null (or a
+three-player game quietly ran with two — the flake showed as a MISSING Carol, which is
+worse than an error because nothing failed loudly). Root cause was in the test harness,
+not the game: `refresh`, `joinPlayers` and `newGameWithHost` now wait bounded for the
+server's answer instead of trusting a stopwatch, and report ws errors when the wait
+times out. 14/14 twice after, including once immediately post-deploy.
+
+**One process slip owned:** the deploy was chained after `tail` with `&&`, so it shipped
+before the suite result was read (13/14 at that moment). Harmless — the failing test was
+the flake above and the deployed artifact was the visually-verified client on an
+unchanged server — but gate on the judge, not on the pager.

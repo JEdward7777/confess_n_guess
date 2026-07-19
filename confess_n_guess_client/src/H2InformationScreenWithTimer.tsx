@@ -4,7 +4,7 @@ import {socket} from './socket';
 import React, {useEffect, useState, useRef} from 'react';
 
 import {ClientGameState} from './../../src/IncludeStuff';
-
+import { RadarRing } from './SpaceArt';
 
 interface H2InformationScreenWithTimerProps {
     gameState: ClientGameState
@@ -49,10 +49,14 @@ const H2InformationScreenWithTimer = ({gameState}: H2InformationScreenWithTimerP
     const text = gameState.text ?? "Please wait...";
 
     return (
-        <div>
-            <h1 style={{ fontSize: '24px' }}>{text}</h1>
-            <h2 style={{ fontSize: '48px', marginTop: '20px' }}>{count}</h2>
-            <p>Seconds remaining</p>
+        <div className="screen host-screen rise-in">
+            <p className="tagline">mission clock</p>
+            <h1>{text}</h1>
+            <div className="timer-wrap">
+                <RadarRing />
+                <div className={'timer-count' + (count <= 10 ? ' low' : '')}>{count}</div>
+            </div>
+            <p className="hint-text">seconds remaining</p>
         </div>
     );
 }

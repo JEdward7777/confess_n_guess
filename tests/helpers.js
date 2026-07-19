@@ -101,6 +101,18 @@ function connect(url) {
     return c;
 }
 
+/** Wait (bounded) until the client has heard SOMETHING from the server. */
+async function awaitReply(c, what) {
+    const deadline = Date.now() + 5000;
+    while (c.last === null && Date.now() < deadline) {
+        await sleep(50);
+    }
+    if (c.last === null) {
+        throw new Error(`no reply for ${what}` + (c.wsError ? ` (ws error: ${c.wsError})` : ''));
+    }
+    await sleep(100); // let any follow-up state in the same burst land
+}
+
 /** Create a game over HTTP, connect its host socket, identify. Returns { host, code }. */
 async function newGameWithHost(url) {
     const res = await fetch(url + '/api/newGame', { method: 'POST' });
@@ -108,31 +120,52 @@ async function newGameWithHost(url) {
     if (!code) throw new Error('newGame allocated no code: ' + JSON.stringify(await res.text()));
     const host = connect(url);
     host.socket.emit('identify', { role: 'host', code });
-    await sleep(300);
+    await awaitReply(host, 'host identify');
     return { host, code };
 }
 
-/** Join players by name. Returns a map of name -> client. */
+/**
+ * Join players by name. Returns a map of name -> client.
+ *
+ * Waits for each join to be ANSWERED before moving on. The fixed-sleep version lost
+ * players under load - a cold DO answered slower than the stopwatch, the test moved on,
+ * and a three-player game quietly ran with two (the flake showed as a missing Carol,
+ * not as an error).
+ */
 async function joinPlayers(url, code, names) {
     const players = {};
     for (const name of names) {
         const p = connect(url);
         p.socket.emit('joinGame', code);
-        await sleep(80);
+        await awaitReply(p, `joinGame ${name}`);
+        p.last = null; // arm the wait for the nameAndEmoji answer
         p.socket.emit('nameAndEmoji', { name, emoji: '😊', code });
-        await sleep(120);
+        await awaitReply(p, `nameAndEmoji ${name}`);
         players[name] = p;
     }
     return players;
 }
 
-/** Simulate a browser refresh: a brand new socket that identifies with code+name. */
+/**
+ * Simulate a browser refresh: a brand new socket that identifies with code+name.
+ *
+ * Waits for the server's ANSWER rather than a fixed beat: a cold Durable Object under
+ * load can take longer than any polite sleep, and the suite flaked exactly there -
+ * assertions reading `last === null` because the reply was still in flight. Bounded so
+ * a genuinely dead server still fails fast.
+ */
 async function refresh(url, code, name) {
     const c = connect(url);
     c.socket.emit('identify', name === '<host>' ? { role: 'host', code } : { role: 'player', code, name });
-    await sleep(250);
+    const deadline = Date.now() + 5000;
+    while (c.last === null && Date.now() < deadline) {
+        await sleep(50);
+    }
+    await sleep(100); // let any follow-up state in the same burst land
     return c;
 }
+
+// (refresh tolerates no-reply: some tests probe dead codes where silence is the finding)
 
 /** Everyone answers their question and we land in the first lie round. */
 async function everyoneAnswers(players, code, suffix = 'truth') {

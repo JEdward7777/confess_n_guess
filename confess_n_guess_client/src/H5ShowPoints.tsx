@@ -4,7 +4,7 @@ import { socket } from './socket';
 import React, { useState, useEffect, useRef } from 'react';
 
 import { ClientGameState, LeaderboardEntry } from './../../src/IncludeStuff';
-
+import { ScoreConstellation } from './SpaceArt';
 
 interface H5ShowPointsProps {
     gameState: ClientGameState
@@ -14,7 +14,7 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
 
     const isHost = gameState.name === '<host>';
     const code = gameState.sharedState?.code;
-    
+
     // Auto-continue timer: 60 seconds. The host drives this screen; the server only has a
     // long backstop for when there is no host at all (CNG-028).
     const [countdown, setCountdown] = useState<number | null>(null);
@@ -53,36 +53,27 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
     const text = gameState.text ?? "Points for this round";
 
     return (
-        <div style={{ backgroundColor: '#1a1a1a', minHeight: '100vh', color: '#fff', padding: '20px' }}>
-            <h1 style={{ color: '#fff' }}>Points This Round</h1>
-            <div style={{ whiteSpace: 'pre-wrap', color: '#ccc' }}>{text}</div>
-            
-            <div style={{ marginTop: '30px' }}>
-                <h2 style={{ color: '#fff' }}>Leaderboard</h2>
-                <table style={{ width: '100%', maxWidth: '400px', borderCollapse: 'collapse' }}>
+        <div className="screen host-screen rise-in">
+            <ScoreConstellation />
+            <p className="tagline">telemetry</p>
+            <h1>Round Scores</h1>
+            <p className="hint-text" style={{ whiteSpace: 'pre-wrap' }}>{text}</p>
+
+            <div className="panel" style={{ maxWidth: '28rem', margin: '1rem auto 0' }}>
+                <table>
                     <thead>
-                        <tr style={{ backgroundColor: '#333' }}>
-                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Rank</th>
-                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Player</th>
-                            <th style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>Points</th>
+                        <tr>
+                            <th style={{ textAlign: 'center' }}>Rank</th>
+                            <th>Player</th>
+                            <th style={{ textAlign: 'right' }}>Points</th>
                         </tr>
                     </thead>
                     <tbody>
                         {leaderboard.map((entry: LeaderboardEntry, index: number) => (
-                            <tr key={entry.name} style={{ 
-                                backgroundColor: index === 0 ? '#2d2d2d' : '#1a1a1a',
-                                color: '#fff',
-                                fontWeight: index === 0 ? 'bold' : 'normal'
-                            }}>
-                                <td style={{ padding: '10px', border: '1px solid #555', textAlign: 'center', color: '#fff' }}>
-                                    {index + 1}
-                                </td>
-                                <td style={{ padding: '10px', border: '1px solid #555', color: '#fff' }}>
-                                    {entry.emoji} {entry.name}
-                                </td>
-                                <td style={{ padding: '10px', border: '1px solid #555', textAlign: 'center', color: '#fff' }}>
-                                    {entry.points}
-                                </td>
+                            <tr key={entry.name} className={index === 0 ? 'lb-first' : ''}>
+                                <td style={{ textAlign: 'center' }}>{index + 1}</td>
+                                <td>{entry.emoji} {entry.name}</td>
+                                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{entry.points}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -90,23 +81,10 @@ const H5ShowPoints = ({ gameState }: H5ShowPointsProps) => {
             </div>
 
             {isHost && (
-                <div style={{ marginTop: '30px', textAlign: 'center' }}>
-                    <button 
-                        onClick={handleContinue}
-                        style={{ 
-                            padding: '15px 30px', 
-                            fontSize: '18px',
-                            backgroundColor: '#2196F3',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        Continue
-                    </button>
+                <div style={{ marginTop: '1.4rem' }}>
+                    <button onClick={handleContinue}>Continue</button>
                     {countdown !== null && (
-                        <p style={{ marginTop: '10px', color: '#888', fontSize: '14px' }}>
+                        <p className="faint-text" style={{ marginTop: '0.6rem' }}>
                             Auto-continue in {countdown} seconds
                         </p>
                     )}

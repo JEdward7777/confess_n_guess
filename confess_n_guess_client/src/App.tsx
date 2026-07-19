@@ -69,11 +69,13 @@ function App() {
       });
     }
 
-    // Identify on connect rather than waiting to be asked. The socket is created at
-    // module load, before this effect runs, so a fast connection can deliver
-    // 'identifyMe' before the listener exists and it is then lost forever (CNG-018).
-    // Covers reconnects too, since socket.io re-fires 'connect'.
-    if (socket.connected) identify();
+    // Identify immediately: with the lazy-connecting shim, the identify emit is what
+    // OPENS the connection, so gating on socket.connected deadlocks - the app waits for
+    // a connect that only an emit can cause (found by screenshotting a refreshing
+    // player; the test suite's own client emits eagerly and could never see it).
+    // The 'connect' listener stays for reconnects, and identifyMe as the server's
+    // belt-and-braces (CNG-018).
+    identify();
     socket.on('connect', identify);
     socket.on('identifyMe', identify);
     return () => {

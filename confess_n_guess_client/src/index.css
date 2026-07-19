@@ -1,68 +1,213 @@
+/* ============================================================================
+   CONFESS 'N' GUESS — "deep signal" space-techno theme
+   Mobile-first: base styles are for a phone in one hand; media queries widen
+   for the host screen on a laptop/TV. Art is stroke-based neon SVG (SpaceArt).
+   ========================================================================== */
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* the void */
+  --bg-0: #060913;
+  --bg-1: #0b1026;
+  --bg-2: #111736;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* neon */
+  --cyan: #22d3ee;
+  --magenta: #e879f9;
+  --violet: #8b5cf6;
+  --truth: #34d399;
+  --gold: #fbbf24;
+  --danger: #fb7185;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* text */
+  --ink: #e6edf7;
+  --ink-dim: #8b9cc0;
+  --ink-faint: #5b6a8c;
+
+  --panel: rgba(17, 23, 54, 0.72);
+  --panel-edge: rgba(34, 211, 238, 0.35);
+
+  --font-display: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Exo 2', 'Segoe UI', system-ui, sans-serif;
+
+  color-scheme: dark;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
   min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  background-color: var(--bg-0);
+  /* nebulas + starfield, all vector, no requests */
+  background-image:
+    radial-gradient(ellipse 80% 55% at 75% -10%, rgba(139, 92, 246, 0.22), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 15% 105%, rgba(34, 211, 238, 0.13), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 90% 80%, rgba(232, 121, 249, 0.10), transparent 65%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cg fill='%23e6edf7'%3E%3Ccircle cx='24' cy='36' r='1.1'/%3E%3Ccircle cx='120' cy='84' r='0.7'/%3E%3Ccircle cx='210' cy='40' r='1.3'/%3E%3Ccircle cx='330' cy='96' r='0.8'/%3E%3Ccircle cx='396' cy='30' r='1.1'/%3E%3Ccircle cx='60' cy='160' r='0.9'/%3E%3Ccircle cx='168' cy='190' r='0.6'/%3E%3Ccircle cx='276' cy='150' r='1'/%3E%3Ccircle cx='372' cy='210' r='0.7'/%3E%3Ccircle cx='36' cy='276' r='0.8'/%3E%3Ccircle cx='140' cy='300' r='1.2'/%3E%3Ccircle cx='250' cy='264' r='0.6'/%3E%3Ccircle cx='324' cy='330' r='1'/%3E%3Ccircle cx='90' cy='390' r='0.7'/%3E%3Ccircle cx='204' cy='372' r='0.9'/%3E%3Ccircle cx='300' cy='408' r='0.6'/%3E%3Ccircle cx='390' cy='366' r='1.2'/%3E%3C/g%3E%3Cg fill='%238b9cc0'%3E%3Ccircle cx='84' cy='60' r='0.5'/%3E%3Ccircle cx='260' cy='108' r='0.5'/%3E%3Ccircle cx='348' cy='168' r='0.5'/%3E%3Ccircle cx='108' cy='228' r='0.5'/%3E%3Ccircle cx='228' cy='330' r='0.5'/%3E%3Ccircle cx='24' cy='348' r='0.5'/%3E%3Ccircle cx='366' cy='288' r='0.5'/%3E%3C/g%3E%3C/svg%3E");
+  background-attachment: fixed;
+}
+
+/* ---- type ---------------------------------------------------------------- */
+
+h1, h2, .display {
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
 h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  font-size: clamp(1.3rem, 4.5vw + 0.5rem, 2.2rem);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0.4em 0;
 }
+
+h2 {
+  font-size: clamp(1.05rem, 3vw + 0.4rem, 1.5rem);
+  font-weight: 500;
+  color: var(--ink-dim);
+  margin: 0.4em 0;
+}
+
+p { font-size: 1.05rem; margin: 0.6em 0; }
+
+.glow-cyan    { text-shadow: 0 0 12px rgba(34, 211, 238, 0.55); }
+.glow-magenta { text-shadow: 0 0 12px rgba(232, 121, 249, 0.55); }
+.glow-gold    { text-shadow: 0 0 18px rgba(251, 191, 36, 0.55); }
+
+/* ---- controls ------------------------------------------------------------ */
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.6);
+  border-radius: 10px;
+  padding: 0.85em 1.6em;      /* >=44px tap target */
+  min-height: 48px;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: box-shadow 0.2s, background 0.2s, transform 0.1s;
+  box-shadow: 0 0 0 rgba(34, 211, 238, 0);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+button:hover:not(:disabled), button:focus-visible {
+  background: rgba(34, 211, 238, 0.16);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.35), inset 0 0 12px rgba(34, 211, 238, 0.12);
+  outline: none;
+}
+
+button:active:not(:disabled) { transform: translateY(1px); }
+
+button:disabled {
+  color: var(--ink-faint);
+  border-color: rgba(91, 106, 140, 0.5);
+  background: rgba(91, 106, 140, 0.08);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+button.btn-magenta {
+  color: var(--magenta);
+  border-color: rgba(232, 121, 249, 0.6);
+  background: rgba(232, 121, 249, 0.08);
+}
+button.btn-magenta:hover:not(:disabled), button.btn-magenta:focus-visible {
+  background: rgba(232, 121, 249, 0.16);
+  box-shadow: 0 0 18px rgba(232, 121, 249, 0.35), inset 0 0 12px rgba(232, 121, 249, 0.12);
+}
+
+input[type="text"] {
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  color: var(--ink);
+  background: rgba(6, 9, 19, 0.7);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 10px;
+  padding: 0.8em 1em;
+  min-height: 48px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="text"]:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.3);
+}
+
+input[type="text"]::placeholder { color: var(--ink-faint); }
+
+/* ---- surfaces ------------------------------------------------------------ */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 24px rgba(6, 9, 19, 0.6);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+}
+
+th {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  padding: 0.6em 0.7em;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.35);
+  text-align: left;
+}
+
+td {
+  padding: 0.65em 0.7em;
+  border-bottom: 1px solid rgba(91, 106, 140, 0.25);
+  color: var(--ink);
+}
+
+tr.lb-first td {
+  color: var(--gold);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+/* ---- animation ----------------------------------------------------------- */
+
+@keyframes orbit    { to { transform: rotate(360deg); } }
+@keyframes floaty   { 0%,100% { transform: translateY(0) rotate(-2deg); }
+                      50%     { transform: translateY(-9px) rotate(2deg); } }
+@keyframes wavering { 0% { opacity: 0.9; transform: scale(0.6); }
+                      100% { opacity: 0; transform: scale(1.5); } }
+@keyframes sweep    { to { transform: rotate(360deg); } }
+@keyframes blinker  { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes riser    { from { opacity: 0; transform: translateY(10px); }
+                      to   { opacity: 1; transform: translateY(0); } }
+
+.anim-orbit  { animation: orbit 14s linear infinite; transform-origin: center; transform-box: fill-box; }
+.anim-float  { animation: floaty 5s ease-in-out infinite; }
+.anim-wave   { animation: wavering 2.4s ease-out infinite; transform-origin: center; transform-box: fill-box; }
+.anim-sweep  { animation: sweep 3.2s linear infinite; transform-origin: center; transform-box: fill-box; }
+.anim-blink  { animation: blinker 1.6s ease-in-out infinite; }
+.rise-in     { animation: riser 0.35s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-orbit, .anim-float, .anim-wave, .anim-sweep, .anim-blink { animation: none; }
 }

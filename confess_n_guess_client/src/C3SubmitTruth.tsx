@@ -4,7 +4,7 @@ import {socket} from './socket';
 import React, {useState, useEffect} from 'react';
 
 import {ClientGameState} from './../../src/IncludeStuff';
-
+import { TruthBeacon } from './SpaceArt';
 
 interface C3SubmitTruthProps {
     gameState: ClientGameState
@@ -17,7 +17,7 @@ const C3SubmitTruth = ({gameState}: C3SubmitTruthProps) => {
 
     useEffect(() => {
         setAnswer("");
-        
+
         if (gameState.question) {
             setStoredQuestion(gameState.question);
         } else if (gameState.text) {
@@ -34,45 +34,42 @@ const C3SubmitTruth = ({gameState}: C3SubmitTruthProps) => {
         if (!answer.trim()) {
             return;
         }
-        
+
         socket.emit("sendQuestionAnswer", {
-            name: gameState?.name, 
-            code: gameState?.sharedState?.code ?? "", 
+            name: gameState?.name,
+            code: gameState?.sharedState?.code ?? "",
             answer: answer,
             question: storedQuestion
         });
     }
 
-    const error = gameState.error ?? ""; 
+    const error = gameState.error ?? "";
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && answer.trim()) {
             submitTruth();
         }
     };
-    
+
     return (
-        <div>
-            <h1 style={{ fontSize: '1.5rem' }}>{gameState.instructionText || 'Answer the question about yourself'}</h1>
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: '20px', fontSize: '18px' }}>
-                {storedQuestion}
+        <div className="screen rise-in">
+            <TruthBeacon />
+            <p className="tagline">truth transmission</p>
+            <h1>{gameState.instructionText || 'Answer the question about yourself'}</h1>
+            <div className="prompt-panel">{storedQuestion}</div>
+            <div className="stack">
+                <input
+                    type="text"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Broadcast the honest answer…"
+                />
+                <button onClick={submitTruth} disabled={!answer.trim()}>
+                    Transmit Truth
+                </button>
             </div>
-            <input 
-                type="text" 
-                value={answer} 
-                onChange={(e) => setAnswer(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your answer here..."
-                style={{ padding: '10px', fontSize: '16px', width: '300px' }}
-            />
-            <button 
-                onClick={submitTruth}
-                disabled={!answer.trim()}
-                style={{ marginLeft: '10px', padding: '10px 20px', fontSize: '16px' }}
-            >
-                Submit
-            </button>
-            {error && <p>{error}</p>}
+            {error && <p className="error-text">{error}</p>}
         </div>
     );
 }

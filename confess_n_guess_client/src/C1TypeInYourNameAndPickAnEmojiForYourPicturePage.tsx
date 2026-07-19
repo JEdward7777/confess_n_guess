@@ -4,8 +4,8 @@ import {socket} from './socket';
 import React, {useState} from 'react';
 
 import {ClientGameState} from './../../src/IncludeStuff';
-import EmojiPicker from './EmojiPicker'; // Import the EmojiPicker component
-
+import EmojiPicker from './EmojiPicker';
+import { HelmetBadge } from './SpaceArt';
 
 interface C1TypeInYourNameAndPickAnEmojiForYourPicturePageProps {
     gameState: ClientGameState
@@ -14,7 +14,7 @@ interface C1TypeInYourNameAndPickAnEmojiForYourPicturePageProps {
 const C1TypeInYourNameAndPickAnEmojiForYourPicturePage = ({gameState}: C1TypeInYourNameAndPickAnEmojiForYourPicturePageProps) => {
 
     const [inputName, setInputName] = useState<string>(gameState.name ?? "");
-    const [inputEmoji, setInputEmoji] = useState<string>(gameState?.sharedState?.users[gameState?.name || ""]?.emoji ?? "😊");
+    const [inputEmoji, setInputEmoji] = useState<string>(gameState?.sharedState?.users[gameState?.name || ""]?.emoji ?? "🚀");
     const [error, setError] = useState<string>("");
 
     const sendNameAndEmoji = () => {
@@ -28,7 +28,7 @@ const C1TypeInYourNameAndPickAnEmojiForYourPicturePage = ({gameState}: C1TypeInY
             setError("Name cannot be <host>");
             return;
         }
-        
+
         setError("");
         socket.emit("nameAndEmoji", {name: trimmedName, emoji: inputEmoji, code: gameState?.sharedState?.code ?? ""});
     }
@@ -40,18 +40,27 @@ const C1TypeInYourNameAndPickAnEmojiForYourPicturePage = ({gameState}: C1TypeInY
     }
 
     return (
-        <div>
-            <h1>Type in your name and pick an emoji for your picture</h1>
-            <input 
-                type="text" 
-                placeholder="Enter Name" 
-                value={inputName} 
-                onChange={(e) => setInputName(e.target.value)}
-                onKeyPress={handleKeyPress}
-            />
-            <EmojiPicker selectedEmoji={inputEmoji} onSelectEmoji={(selectedEmoji) => setInputEmoji(selectedEmoji)}/>
-            <button onClick={sendNameAndEmoji}>Submit</button>
-            {error && <p style={{ color: 'red' }}>{error}</p>}
+        <div className="screen rise-in">
+            <HelmetBadge emoji={inputEmoji} />
+            <p className="tagline">crew registration</p>
+            <h1>Suit up</h1>
+            <p className="hint-text">Call sign and portrait for the mission roster.</p>
+
+            <div className="stack" style={{ marginTop: '0.8rem' }}>
+                <input
+                    type="text"
+                    placeholder="Your name"
+                    value={inputName}
+                    onChange={(e) => setInputName(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    style={{ textAlign: 'center' }}
+                    maxLength={40}
+                />
+                <EmojiPicker selectedEmoji={inputEmoji} onSelectEmoji={(selectedEmoji) => setInputEmoji(selectedEmoji)}/>
+                <button onClick={sendNameAndEmoji}>Board the Ship</button>
+            </div>
+
+            {error && <p className="error-text">{error}</p>}
         </div>
     );
 }
