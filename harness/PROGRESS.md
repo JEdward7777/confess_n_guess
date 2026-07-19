@@ -896,3 +896,20 @@ a full game around it. The captured transcript hit every moment in order — joi
 round, lie round naming the target, voting, both reveal cards quoted verbatim, a lie
 busted with its author, a truth confirmed, points, winner — with no consecutive repeats,
 and a player page confirmed silent. 14/14 suite green.
+
+---
+
+## 2026-07-19 — Embargo lifted; two corrections ship with the announcer
+
+The user said "commit and publish" with two corrections, which lifts the TTS embargo:
+
+1. **The alien ship (🛸) decommissioned** from the picker — the earlier alien removal
+   caught the faces but missed the vehicle. Replaced with a satellite 🛰️.
+2. **No more dead end after game over.** A player refreshing post-game landed on a
+   waiting screen reading "The game has ended!" with no way out. Rather than bolting an
+   escape button onto a dead end, the GameOver resync now sends the winner screen (H6)
+   with the standings — same as everyone present got — and H6's button reads "Back to
+   Home" on player phones ("Start New Game" remains for the host). A permanent guard
+   went into fullgame: a post-game refresh must land on h6 with the full leaderboard.
+
+Deployed with the announcer aboard.

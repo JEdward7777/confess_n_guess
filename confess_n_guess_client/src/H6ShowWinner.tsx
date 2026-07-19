@@ -23,6 +23,7 @@ const H6ShowWinner = ({ gameState }: H6ShowWinnerProps) => {
     const leaderboard = gameState.leaderboard ?? [];
     const text = gameState.text ?? "Game Over!";
     const winner = leaderboard.length > 0 ? leaderboard[0] : null;
+    const isHost = gameState.name === '<host>';
 
     // The grand finale, once. Host only - players see this screen too.
     useEffect(() => {
@@ -71,7 +72,7 @@ const H6ShowWinner = ({ gameState }: H6ShowWinnerProps) => {
             </div>
 
             <div style={{ marginTop: '1.4rem' }}>
-                <button onClick={handleNewGame}>Start New Game</button>
+                <button onClick={handleNewGame}>{isHost ? 'Start New Game' : 'Back to Home'}</button>
             </div>
         </div>
     );

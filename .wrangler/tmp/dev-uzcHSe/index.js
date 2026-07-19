@@ -1090,6 +1090,7 @@ ${truth.question}` : "No question available";
         textToSend = "Please wait while results are being shown...";
         break;
       case "gameOver" /* GameOver */:
+        screenToSend = 6 /* h6ShowTheWinner */;
         textToSend = "The game has ended!";
         break;
     }

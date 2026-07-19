@@ -1,7 +1,7 @@
 // A complete game, host + 3 players, every round, through to the winner.
 // Exercises every phase transition. Would have caught CNG-001, -004, -013 and -024.
 
-const { S, screenName, sleep, newGameWithHost, joinPlayers, everyoneAnswers, checker } = require('./helpers');
+const { S, screenName, sleep, newGameWithHost, joinPlayers, refresh, everyoneAnswers, checker } = require('./helpers');
 
 module.exports = {
     name: 'full game, start to winner',
@@ -80,6 +80,13 @@ module.exports = {
         t.check('everyone scored 4000',
             lb.length === names.length && lb.every(e => e.points === 4000),
             lb.map(e => `${e.name}=${e.points}`).join(' '));
+
+        // A refresh AFTER the game ends must land on the winner screen, not strand the
+        // player on a dead-end waiting screen (family playtest, 2026-07-19).
+        const back = await refresh(url, code, names[0]);
+        t.screenIs('a post-game refresh lands on the winner screen', back.last, S.h6Winner);
+        t.check('with the final standings aboard', (back.leaderboard || []).length === names.length);
+        back.close();
 
         [host, ...Object.values(P)].forEach(c => c.close());
         return t.ok;

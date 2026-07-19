@@ -23,10 +23,6 @@ the session scratchpad and should be folded into T8.
 
 ## Now
 
-**⚠ DEPLOY EMBARGO:** the announcer (TTS) work is committed but **must not be deployed
-until the user gives leave** — they are testing the previous deploy with their family.
-`npm run deploy` ships everything on main; do not run it.
-
 **The Cloudflare port is the active project.** Plan and decisions live in `PORT.md`;
 these tasks map to its milestones. The Node/socket.io version is frozen on branch
 `socketio` (`d483727`).

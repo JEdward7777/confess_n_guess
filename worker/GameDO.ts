@@ -707,6 +707,10 @@ export class GameDurableObject extends DurableObject<Env> {
                 break;
 
             case GamePhase.GameOver:
+                // The winner screen, same as everyone who was present got - a refresh
+                // after game over used to strand players on a waiting screen with no
+                // way home (family playtest feedback, 2026-07-19).
+                screenToSend = Screens.h6ShowTheWinner;
                 textToSend = 'The game has ended!';
                 break;
         }
