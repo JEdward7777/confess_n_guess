@@ -824,3 +824,19 @@ times out. 14/14 twice after, including once immediately post-deploy.
 before the suite result was read (13/14 at that moment). Harmless — the failing test was
 the flake above and the deployed artifact was the visually-verified client on an
 unchanged server — but gate on the judge, not on the pager.
+
+---
+
+## 2026-07-19 — lansfords.com/confessnguess redirect; custom domain declined by decision
+
+Added a redirect at https://lansfords.com/confessnguess (the jedward7777.github.io
+Jekyll repo, following its existing /mightymen pattern; query strings carry through so
+shared ?code= links land in the join flow). Verified live.
+
+**Decision, don't re-propose:** the Worker stays on workers.dev. A custom domain would
+require moving lansfords.com's nameservers to Cloudflare wholesale — subdomain setup is
+Enterprise-only (verified against the docs, not recalled) — and the user judges the
+migration risk to their Zoho email not worth it. Correct trade; also costless: the
+redirect uses location.replace, so the host lands on workers.dev and the QR encodes it
+directly — no hop for scanning players. (An earlier claim here that scanners would
+bounce through the redirect was wrong and is retracted.)
