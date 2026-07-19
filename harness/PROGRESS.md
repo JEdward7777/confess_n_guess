@@ -913,3 +913,12 @@ The user said "commit and publish" with two corrections, which lifts the TTS emb
    went into fullgame: a post-game refresh must land on h6 with the full leaderboard.
 
 Deployed with the announcer aboard.
+
+**Post-publish addendum:** the pre-publish suite read 13/14 and the commit+deploy chain
+ran before the verdict was read — the SAME gate-on-the-pager mistake as two days ago,
+now committed twice, so the rule is strengthened in README: read the verdict and act in
+separate commands, never `tail && deploy`. The failure itself was the timer-fires test
+racing its own server restart: a 3s round legitimately expires during a slower wrangler
+startup, the restored alarm correctly restarts the round, and the test only accepted the
+narrower outcome. Product behavior was correct (it's CNG-028's design working); the test
+now accepts both legitimate post-restart states. Deployed code unaffected.

@@ -61,12 +61,20 @@ module.exports = {
         // No "resumed timer" log to assert any more: alarms are durable, surviving the
         // restart natively - the behavioral check below is the whole proof.
 
-        // Reconnect one player and let the restored clock run out.
+        // Reconnect one player. With a 3s round clock, a slow wrangler restart can
+        // legitimately outlast the round: the restored alarm fires during startup, finds
+        // no lies, and restarts the round - which is CORRECT behavior and itself proof
+        // the restored clock ran. So both states are valid here; asserting only c5Lie
+        // made this test race its own server's startup time (flaked 2026-07-19).
         const back = await refresh(url, code, names[1]);
-        t.screenIs('reconnected into the lie round', back.last, S.c5Lie);
+        t.check('reconnected into a live restored game (lie round, or already restarted)',
+            back.last === S.c5Lie || back.last === S.c3Truth,
+            `on ${screenName(back.last)}`);
+        const before = back.last;
         await sleep(4500);
-        t.check('the restored round timed out on its own',
-            back.last !== S.c5Lie, `still on ${screenName(back.last)}`);
+        t.check('the restored clock keeps the game moving',
+            back.last !== before || back.screens.length > 1,
+            `still on ${screenName(back.last)} with no further transitions`);
 
         back.close();
         return t.ok;

@@ -82,6 +82,11 @@ in this project has been about *what the server sends to whom*, which only a rea
 can see. Each test gets a freshly started server on a free port in its own scratch
 directory, so nothing leaks between tests or into the real `games.json`.
 
+**Read the verdict BEFORE acting on it — in separate commands.** Twice now a commit or
+deploy was chained after `tail`ing the suite log in one command, shipping before the
+result was read (both times harmless, both times wrong). Never `tail ... && commit` or
+`tail ... && deploy`: read the count, then act in the next command.
+
 **Run `npm test` before every check-in.** A fix isn't `Fixed` until the suite is green
 *and* the behaviour has been seen working — for anything the suite can't reach, drive a
 host plus three player tabs by hand, **including a mid-game refresh of both a player and
