@@ -939,3 +939,20 @@ with speechSynthesis stubbed and counted reveal lines — 33 spoken, 33 distinct
 repeats across the whole game (the old bank would have repeated by answer ~11). The
 deck-based no-repeat picker already guaranteed no repeat until a bank empties; tripling
 just pushed "empty" past any realistic game's answer count.
+
+---
+
+## 2026-07-20 — Doubled the question pool (30 → 60)
+
+The user asked whether the question pool was deep enough. Math: unlike the announcer
+(which burns ~16 lines per game), each GAME consumes only one question per player - the
+truth question - so 30 questions is ~7 games for 4 players but only ~4-5 for a 6-8 player
+group, and repeats show across multiple game nights. Appended 30 fresh questions
+(concrete, family-safe, chosen for lie potential; deduped against the existing set and
+each other). Left the original 30 untouched since the family enjoyed them.
+
+Appended, NOT reordered, deliberately: a parked game's saved usedQuestionIndexes and
+assignedQuestions store indices into ALL_QUESTIONS, and appending keeps every existing
+index pointing at the same question - so no SAVE_VERSION bump and a game live in
+production at deploy time resumes correctly. Recycling (CNG-032) already handles any
+pool size.
