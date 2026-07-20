@@ -922,3 +922,20 @@ racing its own server restart: a 3s round legitimately expires during a slower w
 startup, the restored alarm correctly restarts the round, and the test only accepted the
 narrower outcome. Product behavior was correct (it's CNG-028's design working); the test
 now accepts both legitimate post-restart states. Deployed code unaffected.
+
+---
+
+## 2026-07-20 — Tripled the reveal announcer banks (playtest: "wife was belly laughing")
+
+Second family playtest was a hit; the one complaint was reveal-line repeats coming early
+in a single game. The math: each reveal reads N answers AND N verdicts, so a 4-player
+game burns ~16 answer-lines — the 10-deep banks recycled mid-game. Tripled the four
+reveal-screen banks (revealAnswer, verdictTruth, verdictTruthNobody, verdictLie) to
+~30 each; the other six banks (joins, phase starts, points, winner) fire once per
+moment and were already ample.
+
+Verified directly against the complaint: drove a full 4-player, 4-round game headless
+with speechSynthesis stubbed and counted reveal lines — 33 spoken, 33 distinct, zero
+repeats across the whole game (the old bank would have repeated by answer ~11). The
+deck-based no-repeat picker already guaranteed no repeat until a bank empties; tripling
+just pushed "empty" past any realistic game's answer count.
