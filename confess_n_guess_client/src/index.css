@@ -127,6 +127,28 @@ button.btn-magenta:hover:not(:disabled), button.btn-magenta:focus-visible {
   box-shadow: 0 0 18px rgba(232, 121, 249, 0.35), inset 0 0 12px rgba(232, 121, 249, 0.12);
 }
 
+/* Auto-continue button: fills like a progress bar over its duration, then clicks itself.
+   The fill is a scaleX layer behind the label so it sweeps left-to-right; pointer-events
+   are off it so a click still lands on the button underneath. */
+button.auto-continue-btn {
+  position: relative;
+  overflow: hidden;
+}
+.auto-continue-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: rgba(34, 211, 238, 0.28);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.3) inset;
+  transition-property: transform;
+  transition-timing-function: linear;
+  pointer-events: none;
+}
+.auto-continue-label {
+  position: relative;
+}
+
 input[type="text"] {
   font-family: var(--font-body);
   font-size: 1.05rem;

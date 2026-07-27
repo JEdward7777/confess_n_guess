@@ -956,3 +956,28 @@ assignedQuestions store indices into ALL_QUESTIONS, and appending keeps every ex
 index pointing at the same question - so no SAVE_VERSION bump and a game live in
 production at deploy time resumes correctly. Recycling (CNG-032) already handles any
 pool size.
+
+---
+
+## 2026-07-27 — Mid-game continue buttons auto-advance with a progress-fill
+
+The host's two mid-game "Continue" screens (H3 reveal, H5 round scores) already
+auto-continued, but on a silent 60-second timer with only a small numeric caption —
+long enough that a host once didn't realize it would advance at all. Replaced both with
+a shared `AutoContinueButton` that fills like a progress bar over 8s and then clicks
+itself.
+
+Two guards on the *auto* path (a manual click is always immediate and exempt):
+- It does not start filling until the announcer has stopped talking — "don't interrupt
+  the TTS" (uses new `announcer.isSpeaking()`, true while speechSynthesis is speaking or
+  pending and the announcer is enabled).
+- Mouse movement means the host is present, so any move pushes the fill start out a full
+  minute (HOLD_MS); a move mid-fill cancels it back to waiting. Only after a minute of
+  quiet (and silence) does it fill.
+
+A live caption under the button names the current state (idle hold / waiting on announcer
+/ auto-continuing) so the behavior is legible — the host had been confused once. Firing
+is ref-guarded to happen exactly once (CNG-017 lesson). Client-only change; the
+integration suite can't see host-screen TTS/mouse timing, so this is being live-tested
+per the user rather than covered by a test. Scope was H3+H5 only: the lobby Launch (waits
+on players) and the post-game New Game (game already over) stay manual.

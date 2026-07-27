@@ -1,11 +1,12 @@
 //@ts-ignore
 import { socket } from './socket';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { ClientGameState } from './../../src/IncludeStuff';
 import { TruthScanner } from './SpaceArt';
 import { announcer } from './announcer';
+import AutoContinueButton from './AutoContinueButton';
 
 interface H3ShowLiesAndTruthsProps {
     gameState: ClientGameState
@@ -62,11 +63,6 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
         setAllDone(false);
     }, [gameState.text, answers.length]);
 
-    // Reset countdown when new results come in (separate effect to access setCountdown)
-    useEffect(() => {
-        setCountdown(null);
-    }, [gameState.text, answers.length]);
-
     // Handle the two-stage timing for each entry
     useEffect(() => {
         if (sortedAnswers.length === 0 || allDone) return;
@@ -94,30 +90,6 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
             return () => clearTimeout(timer);
         }
     }, [stage, currentIndex, sortedAnswers.length, allDone]);
-
-    // Auto-continue timer: 60 seconds after all revealed (for host only). The host drives
-    // this screen; the server only has a long backstop for when there is no host at all,
-    // deliberately far longer than the reveal takes so it never cuts this short (CNG-028).
-    const [countdown, setCountdown] = useState<number | null>(null);
-    const hasContinued = useRef(false);
-
-    useEffect(() => {
-        if (!allDone || !isHost) return;
-
-        if (countdown === null) {
-            setCountdown(60);
-            return;
-        }
-        if (countdown > 0) {
-            const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-            return () => clearTimeout(timer);
-        }
-        // Fire once and stay at zero - resetting to null re-armed this forever (CNG-017).
-        if (!hasContinued.current) {
-            hasContinued.current = true;
-            handleContinue();
-        }
-    }, [allDone, isHost, countdown]);
 
     // Get current answer - with safe defaults
     const currentAnswer = sortedAnswers[currentIndex] ?? null;
@@ -204,12 +176,7 @@ const H3ShowLiesAndTruths = ({ gameState }: H3ShowLiesAndTruthsProps) => {
 
             {isHost && allDone && (
                 <div style={{ marginTop: '1.4rem' }}>
-                    <button onClick={handleContinue}>Continue</button>
-                    {countdown !== null && (
-                        <p className="faint-text" style={{ marginTop: '0.6rem' }}>
-                            Auto-continue in {countdown} seconds
-                        </p>
-                    )}
+                    <AutoContinueButton onContinue={handleContinue} />
                 </div>
             )}
         </div>

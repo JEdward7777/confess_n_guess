@@ -312,6 +312,13 @@ class Announcer {
         window.speechSynthesis.speak(u);
     }
 
+    /** True while a line is being spoken (or queued to be). Lets the auto-continue on the
+     *  host screens hold off so it never cuts the announcer off mid-sentence. */
+    isSpeaking(): boolean {
+        if (!this.enabled || !('speechSynthesis' in window)) return false;
+        return window.speechSynthesis.speaking || window.speechSynthesis.pending;
+    }
+
     stop() {
         if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     }
